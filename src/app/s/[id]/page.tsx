@@ -1,0 +1,226 @@
+import dynamic from 'next/dynamic';
+import SharePageClientWrapper from '@/components/share/SharePageClientWrapper';
+import LinkPreview from '@/components/share/LinkPreview';
+import { i18n } from '@/lib/i18n';
+import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { downloadShare } from '@/lib/supabase-storage';
+
+// Dynamic imports for heavy client components
+const QuoteViewer = dynamic(() => import('@/components/share/quote-viewer'), {
+  loading: () => <div className="animate-pulse bg-gray-200 h-64 rounded-lg" />,
+});
+const TimelineViewer = dynamic(() => import('@/components/share/timeline-viewer'), {
+  loading: () => <div className="animate-pulse bg-gray-200 h-64 rounded-lg" />,
+});
+
+async function getOrigin() {
+  const h = await headers();
+  const host = h.get('x-forwarded-host') || h.get('host');
+  const proto = h.get('x-forwarded-proto') || 'http';
+  if (host) return `${proto}://${host}`;
+  return process.env.NEXT_PUBLIC_APP_ORIGIN || 'http://localhost:3000';
+}
+
+async function loadShare(id: string) {
+  try {
+    // Call Supabase directly instead of going through API
+    // This avoids issues with server-side fetch being blocked by proxy
+    console.log('[Share Page] Loading share directly from Supabase:', id);
+    const shareData = await downloadShare(id);
+
+    if (!shareData) {
+      console.log('[Share Page] Share not found in Supabase');
+      return null;
+    }
+
+    console.log('[Share Page] Loaded share data, kind:', shareData.kind);
+    // Return format matching API response (shareData directly)
+    return shareData;
+  } catch (error) {
+    console.error('[Share Page] Error loading share:', error);
+    return null;
+  }
+}
+
+function resolveTask(snapshot: any) {
+  if (!snapshot) return undefined;
+  if (snapshot.kind === 'combined') {
+    return snapshot.timeline?.task || snapshot.quote?.task;
+  }
+  return snapshot.task;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const data = await loadShare(id);
+  const snapshot: any = data?.data;
+  const task = resolveTask(snapshot);
+  const title = typeof task?.name === 'string' && task.name.trim().length > 0 ? task.name : (data ? 'Freelance Flow Share' : 'Share Not Found');
+
+  const description = typeof task?.description === 'string' && task.description.trim().length > 0 ? task.description : '';
+
+  return {
+    title,
+    description,
+    openGraph: { title, description },
+    twitter: { title, description },
+  };
+}
+
+export default async function ShareViewerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  const data = await loadShare(id);
+
+  if (!data) {
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <meta name="robots" content="noindex,nofollow" />
+        <h1 className="text-xl font-semibold">Link not found</h1>
+        <p className="text-sm text-gray-500">This share may have been revoked or expired.</p>
+        <p className="text-xs text-gray-400 mt-4">Share ID: {id}</p>
+      </div>
+    );
+  }
+  const snapshot: any = data.data;
+  // fire-and-forget tracking (best-effort)
+  const origin = await getOrigin();
+  fetch(`${origin}/api/share/trackView`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+    cache: 'no-store',
+  }).catch(() => { });
+  // Unified landing-style page
+  const task = resolveTask(snapshot) as any;
+  const settings = (snapshot as any).settings || (snapshot.kind === 'combined' ? (snapshot.timeline?.settings || snapshot.quote?.settings) : undefined);
+  const T: any = (settings?.language && (i18n as any)[settings.language]) || i18n.vi || i18n.en || {};
+  const clients = (snapshot as any).clients || (snapshot.kind === 'combined' ? (snapshot.timeline?.clients || snapshot.quote?.clients) : undefined);
+  const categories = (snapshot as any).categories || (snapshot.kind === 'combined' ? (snapshot.timeline?.categories || snapshot.quote?.categories) : undefined);
+  const quotePart = snapshot.kind === 'quote' ? snapshot : (snapshot.kind === 'combined' ? snapshot.quote : undefined);
+  const timelinePart = snapshot.kind === 'timeline' ? snapshot : (snapshot.kind === 'combined' ? snapshot.timeline : undefined);
+  const currentClient = clients?.find((c: any) => c.id === task?.clientId);
+  const currentCategory = categories?.find((cat: any) => cat.id === task?.categoryId);
+
+  // Determine which links to show based on snapshot settings
+  const showBriefLinks = quotePart?.showBriefLinks !== false || timelinePart?.showBriefLinks !== false;
+  const showDriveLinks = quotePart?.showDriveLinks !== false || timelinePart?.showDriveLinks !== false;
+  const showValidityNote = quotePart?.showValidityNote !== false;
+  const hasBriefLinks = task?.briefLink && task.briefLink.length > 0;
+  const hasDriveLinks = task?.driveLink && task.driveLink.length > 0;
+  const shouldShowLinks = (showBriefLinks && hasBriefLinks) || (showDriveLinks && hasDriveLinks);
+
+  // Extract quote data for export
+  const quote = quotePart?.quote;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <meta name="robots" content="noindex,nofollow" />
+      {/* Unified Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 break-words">{task?.name || 'Project'}</h1>
+          <p className="text-sm sm:text-base text-gray-600 break-words">
+            {currentClient?.name && currentCategory?.name ? `${currentClient.name} • ${currentCategory.name}` : (currentClient?.name || currentCategory?.name || '')}
+          </p>
+        </div>
+      </header>
+
+      {/* Links Section - Right after header */}
+      {shouldShowLinks && (
+        <div className="bg-gradient-to-b from-gray-50 to-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {showBriefLinks && hasBriefLinks && (
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <h3 className="text-sm font-semibold text-gray-900">{T.briefLink || 'Brief'}</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {task.briefLink.map((link: string, idx: number) => (
+                      <LinkPreview key={idx} url={link} color="blue" />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {showDriveLinks && hasDriveLinks && (
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                    <h3 className="text-sm font-semibold text-gray-900">{T.driveLink || 'Storage'}</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {task.driveLink.map((link: string, idx: number) => (
+                      <LinkPreview key={idx} url={link} color="green" />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex gap-2 overflow-x-auto">
+            {quotePart && (
+              <a href="#quote" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-700 hover:bg-blue-50 rounded-md whitespace-nowrap">{T.priceQuote || 'Quote'}</a>
+            )}
+            {timelinePart && (
+              <a href="#timeline" className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-blue-700 hover:bg-blue-50 rounded-md whitespace-nowrap">{(T as any).timeline || 'Timeline'}</a>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8 sm:space-y-12">
+        {quotePart && (
+          <section id="quote" className="scroll-mt-16">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">{T.priceQuote || 'Quote'}</h2>
+              <SharePageClientWrapper
+                task={task}
+                quote={quote}
+                settings={settings}
+                clients={clients}
+                categories={categories}
+                quotePart={quotePart}
+                timelinePart={timelinePart}
+                type="quote"
+                T={T}
+              />
+            </div>
+            <QuoteViewer {...(quotePart as any)} showHeader={false} showBriefLinks={false} showDriveLinks={false} showValidityNote={showValidityNote} />
+          </section>
+        )}
+        {timelinePart && (
+          <section id="timeline" className="scroll-mt-16">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">{(T as any).timeline || 'Timeline'}</h2>
+              <SharePageClientWrapper
+                task={task}
+                quote={quote}
+                settings={settings}
+                clients={clients}
+                categories={categories}
+                quotePart={quotePart}
+                timelinePart={timelinePart}
+                type="timeline"
+                T={T}
+              />
+            </div>
+            <TimelineViewer {...(timelinePart as any)} showHeader={false} embedded showBriefLinks={false} showDriveLinks={false} />
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}

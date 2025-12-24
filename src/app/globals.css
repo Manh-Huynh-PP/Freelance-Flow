@@ -1,0 +1,557 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Utility classes for word breaking */
+.break-anywhere {
+  overflow-wrap: anywhere;
+}
+
+/* Sticky Header CSS for Table View */
+.sticky-header {
+  height: 100% !important;
+  min-height: 100% !important;
+  overflow: auto;
+  position: relative;
+  flex: 1;
+}
+
+.sticky-header table {
+  position: relative;
+  width: 100%;
+}
+
+.sticky-header thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: hsl(var(--background));
+}
+
+.sticky-header thead tr {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: hsl(var(--background));
+}
+
+.sticky-header th,
+.sticky-header thead th,
+.sticky-header thead tr th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  background: hsl(var(--background)) !important;
+  border-bottom: 2px solid hsl(var(--border)) !important;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Force sticky behavior on desktop */
+@media (min-width: 768px) {
+  .sticky-header {
+    height: 100% !important;
+    min-height: 100% !important;
+    overflow-y: auto;
+    flex: 1 !important;
+  }
+
+  .sticky-header thead {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: hsl(var(--background)) !important;
+  }
+
+  .sticky-header th,
+  .sticky-header thead th,
+  .sticky-header thead tr th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: hsl(var(--background)) !important;
+    border-bottom: 2px solid hsl(var(--border)) !important;
+    box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1) !important;
+  }
+}
+
+/* Dark mode support for sticky headers */
+.dark .sticky-header th,
+.dark .sticky-header thead th,
+.dark .sticky-header thead tr th {
+  background: hsl(var(--background)) !important;
+  box-shadow: 0 2px 4px -1px rgba(255, 255, 255, 0.1) !important;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 215 39% 27%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 39% 27%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 39% 27%;
+    --primary: 223 78% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 98%;
+    --secondary-foreground: 215 39% 27%;
+    --muted: 210 40% 98%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 223 78% 53%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 39% 27%;
+    --input: 215 39% 27%;
+    --ring: 223 78% 53%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --sidebar-background: 221 83% 94%;
+    --sidebar-foreground: 215 39% 27%;
+    --sidebar-primary: 223 78% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 88%;
+    --sidebar-accent-foreground: 215 39% 27%;
+    --sidebar-border: 215 28% 90%;
+    --sidebar-ring: 223 78% 53%;
+
+    /* Status Colors */
+    --status-todo: 262 83% 58%;
+    --status-todo-foreground: 210 40% 98%;
+    --status-inprogress: 48 96% 53%;
+    --status-inprogress-foreground: 215 39% 27%;
+    --status-done: 142 71% 45%;
+    --status-done-foreground: 210 40% 98%;
+    --status-onhold: 25 95% 53%;
+    --status-onhold-foreground: 210 40% 98%;
+    --status-archived: 221 14% 47%;
+    --status-archived-foreground: 210 40% 98%;
+
+    /* Sticky Note Colors */
+    --sticky-note-bg: 54 88% 81%;
+    --sticky-note-fg: 40 84% 19%;
+
+    /* Deadline Colors */
+    --deadline-overdue: 0 72.2% 50.6%;
+    --deadline-due-soon: 32.6 97.7% 59.4%;
+    --deadline-coming-up: 47.9 95.8% 53.1%;
+    --deadline-safe: 142.1 76.2% 36.3%;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 223 78% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 39% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 215 39% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 223 78% 53%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 221 83% 15%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 223 78% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 47% 22%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 0 0% 30%;
+    --sidebar-ring: 217 91% 60%;
+
+    /* Deadline Colors - Dark mode values can be the same or different */
+    --deadline-overdue: 0 72.2% 50.6%;
+    --deadline-due-soon: 32.6 97.7% 59.4%;
+    --deadline-coming-up: 47.9 95.8% 53.1%;
+    --deadline-safe: 142.1 76.2% 36.3%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Custom Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 0;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--primary));
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* Collapse filter section on screens smaller than 1024px (lg breakpoint) */
+@media (max-width: 1023px) {
+  .filter-section {
+    /* Adjust based on your filter section's structure and content */
+    /* Example: Using a max-height and overflow hidden for collapsing */
+  }
+}
+
+/* Status dropdown sub-menu fixes */
+.status-dropdown-content {
+  position: relative !important;
+  overflow: visible !important;
+}
+
+.status-sub-menu {
+  position: absolute !important;
+  z-index: 9999 !important;
+  left: 100% !important;
+  top: 0 !important;
+  margin-left: 4px !important;
+}
+
+/* UncategorizedTasksCarousel overflow fix */
+@layer utilities {
+  .carousel-container-constrained {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .carousel-container-constrained * {
+    box-sizing: border-box !important;
+  }
+
+  .carousel-scroll-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+  }
+
+  /* Kanban-specific scrollbar styles */
+  .kanban-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .kanban-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .kanban-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+
+  .kanban-scrollbar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+    border: 1px solid hsl(var(--muted));
+  }
+
+  .kanban-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--primary));
+  }
+}
+
+/* Tiptap editor list styles override */
+.ProseMirror ul {
+  list-style-type: disc !important;
+  padding-left: 1.5rem !important;
+  /* Adjust padding for visibility */
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror li {
+  margin-bottom: 0.25rem !important;
+}
+
+/* Tiptap editor link styles */
+.ProseMirror a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Styles for rendered Tiptap content */
+.tiptap-rendered-content ul {
+  list-style-type: disc !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tiptap-rendered-content ol {
+  list-style-type: decimal !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tiptap-rendered-content li {
+  margin-bottom: 0.25rem !important;
+}
+
+.tiptap-rendered-content p {
+  margin: 0.5rem 0;
+}
+
+.tiptap-rendered-content a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/*
+ * Overriding styles for rendered tiptap content to ensure consistency.
+ * Sourced from sticky-notes.module.css to fix display issues in TaskDetailsDialog.
+*/
+.tiptap-rendered-content p {
+  margin: 0;
+  padding: 0;
+  line-height: 1.4;
+}
+
+.tiptap-rendered-content ul,
+.tiptap-rendered-content ol {
+  list-style-position: inside;
+  margin: 0.5em 0 0.5em 0;
+  padding-left: 1rem !important;
+  /* Overriding other styles */
+}
+
+.tiptap-rendered-content li {
+  margin-bottom: 0.25em;
+  padding-left: 0.25rem;
+}
+
+.tiptap-rendered-content strong {
+  font-weight: bold;
+}
+
+.tiptap-rendered-content em {
+  font-style: italic;
+}
+
+.tiptap-rendered-content u {
+  text-decoration: underline;
+}
+
+.tiptap-rendered-content s {
+  text-decoration: line-through;
+}
+
+.tiptap-rendered-content a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+
+/* Force correct text color for primary buttons in specific themes */
+/* These themes need white text: Default, Crimson, Forest, Violet, Monochrome */
+
+/* Use specific HSL values that match theme-applicator output */
+:root[style*="--primary: 223 78% 53%"] button[class*="bg-primary"],
+:root[style*="--primary: 223 78% 53%"] .bg-primary,
+:root[style*="--primary: 354 72% 51%"] button[class*="bg-primary"],
+:root[style*="--primary: 354 72% 51%"] .bg-primary,
+:root[style*="--primary: 120 34% 49%"] button[class*="bg-primary"],
+:root[style*="--primary: 120 34% 49%"] .bg-primary,
+:root[style*="--primary: 262 77% 52%"] button[class*="bg-primary"],
+:root[style*="--primary: 262 77% 52%"] .bg-primary,
+:root[style*="--primary: 210 10% 23%"] button[class*="bg-primary"],
+:root[style*="--primary: 210 10% 23%"] .bg-primary {
+  color: white !important;
+}
+
+/* Alternative approach using CSS variables with higher specificity */
+@layer components {
+  button[class*="bg-primary"].text-primary-foreground {
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  .bg-primary.text-primary-foreground {
+    color: hsl(var(--primary-foreground)) !important;
+  }
+
+  /* Calendar date picker text color fixes - Enhanced for better contrast */
+  .rdp-day_selected,
+  .rdp-day_range_start,
+  .rdp-day_range_end {
+    color: white !important;
+    background: hsl(var(--primary)) !important;
+  }
+
+  /* Enhanced range middle days with better contrast - compatible with TimeRangePicker */
+  .rdp-day_range_middle,
+  .rdp-day_range_middle .rdp-day,
+  .rdp-day_range_middle .rdp-button_reset,
+  .rdp-day_range_middle button {
+    color: hsl(var(--foreground)) !important;
+    background: hsl(var(--primary) / 0.2) !important;
+    font-weight: 500 !important;
+  }
+
+  /* Ensure all date range text is visible and contrasted */
+  .rdp-day:not(.rdp-day_selected):not(.rdp-day_range_start):not(.rdp-day_range_end).rdp-day_range_middle,
+  .rdp-day:not(.rdp-day_selected):not(.rdp-day_range_start):not(.rdp-day_range_end).rdp-day_range_middle button {
+    color: hsl(var(--foreground)) !important;
+    background: hsl(var(--primary) / 0.2) !important;
+    font-weight: 500 !important;
+  }
+
+  /* Enhanced hover states - compatible with TimeRangePicker */
+  .rdp-day_range_middle:hover,
+  .rdp-day_range_middle button:hover {
+    color: hsl(var(--foreground)) !important;
+    background: hsl(var(--primary) / 0.3) !important;
+    font-weight: 500 !important;
+  }
+
+  /* Additional safety for date picker button text */
+  .rdp button:not(.rdp-day_selected):not(.rdp-day_range_start):not(.rdp-day_range_end) {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  /* Specific styling for range middle with strong contrast */
+  .rdp-day_range_middle button,
+  .rdp-day.rdp-day_range_middle button {
+    color: hsl(var(--primary)) !important;
+    background: hsl(var(--primary) / 0.15) !important;
+    font-weight: 600 !important;
+  }
+
+  .rdp-day_today {
+    color: hsl(var(--accent-foreground)) !important;
+    background: hsl(var(--accent)) !important;
+  }
+
+  .rdp-day:not(.rdp-day_selected):not(.rdp-day_range_start):not(.rdp-day_range_end):not(.rdp-day_range_middle):not(.rdp-day_today) {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .rdp-day_outside {
+    color: hsl(var(--muted-foreground)) !important;
+    opacity: 0.5 !important;
+  }
+}
+
+/* CRITICAL: High-priority date range picker fixes */
+@layer components {
+
+  /* Override all existing date range styles with maximum specificity */
+  .rdp .rdp-day_range_middle,
+  .rdp .rdp-day_range_middle .rdp-day,
+  .rdp .rdp-day_range_middle button,
+  .rdp-day.rdp-day_range_middle,
+  .rdp-day.rdp-day_range_middle button,
+  [data-rdp] .rdp-day_range_middle,
+  [data-rdp] .rdp-day_range_middle button {
+    color: hsl(var(--foreground)) !important;
+    background-color: hsl(var(--primary) / 0.15) !important;
+    font-weight: 500 !important;
+    border: none !important;
+  }
+
+  /* Enhanced hover states with maximum specificity */
+  .rdp .rdp-day_range_middle:hover,
+  .rdp .rdp-day_range_middle:hover button,
+  .rdp-day.rdp-day_range_middle:hover,
+  .rdp-day.rdp-day_range_middle:hover button,
+  [data-rdp] .rdp-day_range_middle:hover,
+  [data-rdp] .rdp-day_range_middle:hover button {
+    color: hsl(var(--foreground)) !important;
+    background-color: hsl(var(--primary) / 0.25) !important;
+    font-weight: 500 !important;
+  }
+
+  /* Ensure start and end days have proper colors */
+  .rdp .rdp-day_range_start,
+  .rdp .rdp-day_range_end,
+  .rdp .rdp-day_selected {
+    color: hsl(var(--primary-foreground)) !important;
+    background-color: hsl(var(--primary)) !important;
+  }
+
+  /* Safety net for all date picker buttons */
+  .rdp button[type="button"]:not(.rdp-day_selected):not(.rdp-day_range_start):not(.rdp-day_range_end) {
+    color: hsl(var(--foreground)) !important;
+  }
+}
+
+/* FALLBACK: Even higher priority override for stubborn styles */
+.rdp-day_range_middle,
+.rdp-day_range_middle button,
+.rdp .rdp-day_range_middle,
+.rdp .rdp-day_range_middle button {
+  color: hsl(var(--foreground)) !important;
+  background: hsl(var(--primary) / 0.15) !important;
+}
+
+.rdp-day_range_middle:hover,
+.rdp-day_range_middle:hover button,
+.rdp .rdp-day_range_middle:hover,
+.rdp .rdp-day_range_middle:hover button {
+  color: hsl(var(--foreground)) !important;
+  background: hsl(var(--primary) / 0.25) !important;
+}
+
+/* NUCLEAR OPTION: Maximum specificity override */
+html body .rdp-day_range_middle,
+html body .rdp-day_range_middle button,
+html body .rdp .rdp-day_range_middle,
+html body .rdp .rdp-day_range_middle button,
+html body div .rdp-day_range_middle,
+html body div .rdp-day_range_middle button {
+  color: hsl(var(--foreground)) !important;
+  background-color: hsl(var(--primary) / 0.15) !important;
+  font-weight: 500 !important;
+}
+
+html body .rdp-day_range_middle:hover,
+html body .rdp-day_range_middle:hover button,
+html body .rdp .rdp-day_range_middle:hover,
+html body .rdp .rdp-day_range_middle:hover button,
+html body div .rdp-day_range_middle:hover,
+html body div .rdp-day_range_middle:hover button {
+  color: hsl(var(--foreground)) !important;
+  background-color: hsl(var(--primary) / 0.25) !important;
+  font-weight: 500 !important;
+}
+
+@layer utilities {
+  .scrollbar-gutter-stable {
+    scrollbar-gutter: stable;
+  }
+}

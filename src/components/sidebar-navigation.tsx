@@ -1,0 +1,35 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useSearchParams } from 'next/navigation';
+import { LayoutGrid, Puzzle, Bot, GitBranch } from "lucide-react";
+import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
+import { i18n } from "@/lib/i18n";
+import { useDashboard } from "@/contexts/dashboard-context";
+
+export function SidebarNavigation() {
+    const { appData, T } = useDashboard();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+
+    if (!appData || !T) {
+        return null; // or a loading skeleton
+    }
+
+    return (
+        <SidebarMenu>
+            <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === '/dashboard' && !searchParams.get('view')}>
+                    <Link href="/dashboard"><LayoutGrid />{T.dashboard}</Link>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
+
+
+            <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === '/dashboard/ai-assistant' || pathname === '/dashboard/chat'}>
+                    <Link href="/dashboard/ai-hub"><Bot />{T.aiHub}</Link>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
+        </SidebarMenu>
+    );
+}

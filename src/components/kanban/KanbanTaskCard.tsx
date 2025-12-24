@@ -1,0 +1,268 @@
+"use client";
+
+const eisenhowerTooltip: Record<string, string> = {
+  do: 'Ưu tiên cao (Do)',
+  decide: 'Quan trọng (Decide)',
+  delegate: 'Ủy quyền (Delegate)',
+  delete: 'Không quan trọng (Delete)',
+  none: 'Không ưu tiên',
+};
+
+import React, { useState } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Card } from '@/components/ui/card';
+import { Task, Category, Client, Quote, AppSettings, Collaborator, QuoteTemplate } from '@/lib/types';
+import { format, isPast, isToday, isTomorrow } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { TaskDetailsDialog } from '@/components/task-dialogs/TaskDetailsDialog';
+import { Flag, FlagOff } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn } from '@/lib/utils';
+import { i18n } from '@/lib/i18n';
+import { TaskEditDialog } from '@/components/task-dialogs/TaskEditDialog';
+import { useDashboard } from '@/contexts/dashboard-context';
+
+const eisenhowerSchemes = {
+  colorScheme1: { do: '#ef4444', decide: '#3b82f6', delegate: '#f59e42', delete: '#6b7280' },
+  colorScheme2: { do: '#d8b4fe', decide: '#bbf7d0', delegate: '#fed7aa', delete: '#bfdbfe' },
+  colorScheme3: { do: '#99f6e4', decide: '#fbcfe8', delegate: '#fde68a', delete: '#c7d2fe' },
+};
+
+interface KanbanTaskCardProps {
+  task: Task;
+  // Drilled Props (optional)
+  clients?: Client[];
+  categories?: Category[];
+  quotes?: Quote[];
+  collaboratorQuotes?: Quote[];
+  collaborators?: Collaborator[];
+  appSettings?: AppSettings;
+  handleTaskStatusChange?: (taskId: string, status: Task['status'], subStatusId?: string) => void;
+  handleDeleteTask?: (taskId: string) => void;
+  handleEditTask?: (values: any, quoteColumns: any, collaboratorQuoteColumns: any, taskId: string) => void;
+  handleAddClientAndSelect?: (data: Omit<Client, 'id'>) => Client;
+  quoteTemplates?: QuoteTemplate[];
+}
+
+export const KanbanTaskCard: React.FC<Partial<KanbanTaskCardProps>> = ({
+  task,
+  clients = [],
+  categories = [],
+  quotes = [],
+  collaboratorQuotes = [],
+  collaborators = [],
+  appSettings,
+  handleDeleteTask,
+  handleEditTask,
+  handleAddClientAndSelect,
+  quoteTemplates = [],
+  handleTaskStatusChange
+}) => {
+  if (!task) return null;
+
+  const dashboard = useDashboard();
+  const updateQuote = dashboard?.updateQuote;
+  const updateTask = dashboard?.updateTask;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+
+  const scheme = appSettings?.eisenhowerColorScheme || 'colorScheme1';
+  type EisenhowerQuadrant = 'do' | 'decide' | 'delegate' | 'delete';
+
+  function getFlagColor(quadrant?: EisenhowerQuadrant) {
+    if (!quadrant) return '#e5e7eb';
+    const flagColors = eisenhowerSchemes[scheme as keyof typeof eisenhowerSchemes] || eisenhowerSchemes['colorScheme1'];
+    return flagColors[quadrant] || '#e5e7eb';
+  }
+
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  const language = appSettings?.language ?? 'en';
+  const T = i18n[language];
+
+  const category = categories.find(c => c.id === task.categoryId);
+  const client = clients.find(c => c.id === task.clientId);
+  const quote = quotes.find(q => q.id === task.quoteId);
+  const taskCollaboratorQuotes = collaboratorQuotes.filter(cq => task.collaboratorQuotes?.some(tcq => tcq.quoteId === cq.id));
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const isValidDeadline = task.deadline && !isNaN(new Date(task.deadline).getTime());
+  const deadlineDate = isValidDeadline ? new Date(task.deadline) : null;
+
+  const getDeadlineColor = () => {
+    if (!deadlineDate) return '';
+    if (isPast(deadlineDate) && !isToday(deadlineDate)) return 'text-red-500 font-bold';
+    if (isToday(deadlineDate)) return 'text-orange-500 font-bold';
+    if (isTomorrow(deadlineDate)) return 'text-yellow-500';
+    return '';
+  };
+
+  const handleEditClick = () => {
+    setIsDetailsOpen(false);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeleteClick = () => {
+    setIsDetailsOpen(false);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    handleDeleteTask?.(task.id);
+    setIsDeleteDialogOpen(false);
+  };
+
+  return (
+    <>
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogTrigger asChild>
+          <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="mb-2">
+            <div className="relative">
+              <div className="absolute left-2 top-2 z-20">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted"
+                      title={(T as any)?.eisenhowerPriority || 'Eisenhower priority'}
+                      onClick={(e) => { e.stopPropagation(); }}
+                      onMouseDown={(e) => { e.stopPropagation(); }}
+                    >
+                      {task.eisenhowerQuadrant ? (
+                        <Flag size={16} color={getFlagColor(task.eisenhowerQuadrant as any)} fill={getFlagColor(task.eisenhowerQuadrant as any)} className="drop-shadow" />
+                      ) : (
+                        <FlagOff size={16} className="text-muted-foreground" />
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 p-2" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                    <div className="grid grid-cols-2 gap-2" onClick={(e) => e.stopPropagation()}>
+                      {(['do', 'decide', 'delegate', 'delete'] as const).map((q) => (
+                        <Button
+                          key={q}
+                          variant={task.eisenhowerQuadrant === q ? 'default' : 'outline'}
+                          size="sm"
+                          className="h-8 px-2 flex items-center gap-1 justify-start"
+                          onClick={() => {
+                            const updater = (dashboard as any)?.updateTaskEisenhowerQuadrant as (id: string, quad?: 'do' | 'decide' | 'delegate' | 'delete') => void;
+                            if (typeof updater === 'function') updater(task.id, q);
+                          }}
+                        >
+                          <Flag className="w-3 h-3" color={getFlagColor(q)} fill={getFlagColor(q)} />
+                          <span className="text-[11px] capitalize">{(T as any)?.[`quadrant_${q}`] || q}</span>
+                        </Button>
+                      ))}
+                      <Button
+                        variant={!task.eisenhowerQuadrant ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-8 px-2 col-span-2"
+                        onClick={() => {
+                          const updater = (dashboard as any)?.updateTaskEisenhowerQuadrant as (id: string, quad?: 'do' | 'decide' | 'delegate' | 'delete') => void;
+                          if (typeof updater === 'function') updater(task.id, undefined);
+                        }}
+                      >
+                        <FlagOff className="w-3 h-3" />
+                        <span className="text-[11px]">{(T as any)?.clearLabel || 'Clear'}</span>
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <Card className="p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer relative w-full max-w-full overflow-hidden">
+                <p className="font-semibold text-sm mb-2 pl-6 break-words">{task.name}</p>
+                <div className="flex flex-wrap gap-2 text-xs overflow-hidden">
+                  {category && <Badge variant="secondary" className="shrink-0">{category.name}</Badge>}
+                  {client && <Badge variant="outline" className="shrink-0">{client.name}</Badge>}
+                </div>
+                {isValidDeadline && (
+                  <p className={cn("text-xs text-muted-foreground mt-2", getDeadlineColor())}>
+                    {format(deadlineDate!, "MMM dd, yyyy")}
+                  </p>
+                )}
+              </Card>
+            </div>
+          </div>
+        </DialogTrigger>
+        <TaskDetailsDialog
+          task={task}
+          client={client}
+          clients={clients}
+          collaborators={collaborators}
+          categories={categories}
+          quote={quote}
+          quotes={quotes}
+          collaboratorQuotes={taskCollaboratorQuotes}
+          settings={appSettings || dashboard?.appSettings}
+          isOpen={isDetailsOpen}
+          onClose={() => setIsDetailsOpen(false)}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
+          onChangeStatus={(taskId, statusId) => handleTaskStatusChange?.(taskId, statusId as any)}
+          onUpdateQuote={updateQuote}
+          onUpdateTask={updateTask}
+        />
+      </Dialog>
+
+      <TaskEditDialog
+        task={task}
+        quote={quote}
+        collaboratorQuotes={taskCollaboratorQuotes}
+        clients={clients}
+        collaborators={collaborators}
+        categories={categories}
+        quoteTemplates={quoteTemplates}
+        settings={appSettings || dashboard?.appSettings}
+        isOpen={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onSubmit={(values, quoteCols, collabQuoteCols, tid) => {
+          if (handleEditTask) {
+            handleEditTask(values, quoteCols, collabQuoteCols, tid);
+          }
+        }}
+        onAddClient={handleAddClientAndSelect}
+      />
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{T.moveToTrash}?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>
+            {T.moveToTrashDescription}
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{T.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className={cn(buttonVariants({ variant: "destructive" }))}
+              onClick={confirmDelete}
+            >
+              {T.confirmMoveToTrash}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}

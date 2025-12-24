@@ -1,0 +1,795 @@
+"use client";
+
+import React, { useState, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  DollarSign,
+  TrendingDown,
+  TrendingUp,
+  Eye,
+  HelpCircle,
+  Settings,
+  Plus,
+  Trash2,
+  Edit2
+} from 'lucide-react';
+import { useDashboard } from '@/contexts/dashboard-context';
+import { i18n } from '@/lib/i18n';
+import { useToast } from '@/hooks/use-toast';
+import type { FixedCost } from '@/lib/types';
+import type { AppData } from '@/lib/types';
+import { format } from 'date-fns';
+import {
+  calculateFinancialSummary,
+  calculateTaskDetails,
+  calculateAdditionalFinancials,
+  calculateAdditionalTaskDetails,
+  calculateFixedCostDetails
+} from '@/ai/analytics/business-intelligence-helpers';
+import { FixedCostsCard } from '@/components/ai/business/FixedCostsCard';
+
+interface TaskDetail {
+  id: string;
+  name: string;
+  clientName: string;
+  amount: number;
+  type: 'revenue' | 'cost' | 'future-revenue' | 'lost-revenue';
+  status?: string;
+}
+
+interface FinancialSummaryCardProps {
+  summary: {
+    revenue: number;
+    costs: number;
+    profit: number;
+  } | null;
+  currency?: string; // e.g., 'USD' | 'VND'
+  locale?: string;   // e.g., 'en-US' | 'vi-VN'
+  taskDetails?: {
+    revenueItems: TaskDetail[];
+    costItems: TaskDetail[];
+  };
+  additionalFinancials?: {
+    futureRevenue: number;
+    lostRevenue: number;
+  };
+  additionalTaskDetails?: {
+    futureRevenueItems: TaskDetail[];
+    lostRevenueItems: TaskDetail[];
+  };
+  onTaskClick?: (taskId: string) => void;
+  onDateRangeChange?: (range: { from?: Date; to?: Date }) => void;
+}
+type Period = 'all' | 'week' | 'month' | 'year';
+
+export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDetails, additionalFinancials, additionalTaskDetails, onTaskClick, onDateRangeChange }: FinancialSummaryCardProps) {
+  const { appData, setAppData } = useDashboard();
+  const T = i18n[appData?.appSettings?.language as keyof typeof i18n || 'en'];
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogType, setDialogType] = useState<'revenue' | 'costs' | 'future-revenue' | 'lost-revenue' | 'fixed-costs' | null>(null);
+  const rangeCtx = null; // Remove analytics range context
+  const [period, setPeriod] = useState<Period>('all');
+  // Anchors for period selection
+  const now = new Date();
+  const [weekDate, setWeekDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [monthValue, setMonthValue] = useState<string>(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const [yearValue, setYearValue] = useState<number>(now.getFullYear());
+
+
+
+  const fixedCosts = appData?.fixedCosts || [];
+
+  // Calculate fixed costs for the selected period
+  const totalFixedCosts = useMemo(() => {
+    if (!appData?.fixedCosts || appData.fixedCosts.length === 0) return 0;
+
+    let fromDate: Date | undefined;
+    let toDate: Date | undefined;
+    if (period === 'all') {
+      fromDate = undefined; toDate = undefined;
+    } else if (period === 'week') {
+      const anchor = new Date(weekDate);
+      const start = new Date(anchor);
+      const day = start.getDay();
+      const diff = (day + 6) % 7; // Monday
+      start.setDate(start.getDate() - diff);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      fromDate = start; toDate = end;
+    } else if (period === 'month') {
+      const [y, m] = monthValue.split('-').map(Number);
+      fromDate = new Date(y, (m || 1) - 1, 1);
+      toDate = new Date(y, (m || 1), 0);
+    } else {
+      fromDate = new Date(yearValue, 0, 1);
+      toDate = new Date(yearValue, 11, 31);
+    }
+
+    const rangeDays = fromDate && toDate ? (Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1) : undefined;
+
+    return appData.fixedCosts.reduce((total: number, cost: FixedCost) => {
+      if (!cost.isActive) return total;
+      const startDate = new Date(cost.startDate);
+      const endDate = cost.endDate ? new Date(cost.endDate) : null;
+
+      // All-time: approximate across active period
+      if (!fromDate || !toDate) {
+        switch (cost.frequency) {
+          case 'once': return total + cost.amount;
+          case 'weekly': {
+            const until = endDate && endDate < now ? endDate : now;
+            const days = Math.max(0, Math.ceil((until.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+            return total + cost.amount * (days / 7);
+          }
+          case 'monthly': {
+            const until = endDate && endDate < now ? endDate : now;
+            const months = (until.getFullYear() - startDate.getFullYear()) * 12 + (until.getMonth() - startDate.getMonth()) + 1;
+            return total + cost.amount * Math.max(0, months);
+          }
+          case 'yearly': {
+            const until = endDate && endDate < now ? endDate : now;
+            const years = (until.getFullYear() - startDate.getFullYear()) + 1;
+            return total + cost.amount * Math.max(0, years);
+          }
+        }
+      }
+
+      // Bounded period overlap check
+      if ((fromDate && startDate > toDate!) || (endDate && fromDate && endDate < fromDate)) return total;
+
+      let dailyRate = 0;
+      switch (cost.frequency) {
+        case 'weekly': dailyRate = cost.amount / 7; break;
+        case 'monthly': dailyRate = cost.amount / 30.44; break;
+        case 'yearly': dailyRate = cost.amount / 365.25; break;
+        case 'once':
+          if (fromDate && toDate && startDate >= fromDate && startDate <= toDate) return total + cost.amount;
+          return total;
+      }
+      const costForRange = rangeDays ? dailyRate * rangeDays : 0;
+      return total + costForRange;
+    }, 0);
+  }, [appData?.fixedCosts, period, weekDate, monthValue, yearValue]);
+
+  // Derive dateRange from selected period and anchors
+  const selectedRange = useMemo(() => {
+    console.log(`🗓️ Period Selection Debug:`);
+    console.log(`   Period: ${period}`);
+    console.log(`   Week date: ${weekDate}`);
+    console.log(`   Month value: ${monthValue}`);
+    console.log(`   Year value: ${yearValue}`);
+
+    if (period === 'all') {
+      console.log(`   → Range: all (no filter)`);
+      return {} as { from?: Date; to?: Date };
+    }
+    if (period === 'week') {
+      const anchor = new Date(weekDate);
+      const start = new Date(anchor);
+      const day = start.getDay();
+      const diff = (day + 6) % 7; // Monday
+      start.setDate(start.getDate() - diff);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      console.log(`   → Week range: ${start.toISOString()} to ${end.toISOString()}`);
+      return { from: start, to: end };
+    }
+    if (period === 'month') {
+      const [y, m] = monthValue.split('-').map(Number);
+      const from = new Date(y, (m || 1) - 1, 1);
+      const to = new Date(y, (m || 1), 0);
+      console.log(`   → Month range: ${from.toISOString()} to ${to.toISOString()}`);
+      console.log(`   → Month calculation: year=${y}, month=${m}, from=${from.toString()}, to=${to.toString()}`);
+      return { from, to };
+    }
+    // year
+    const from = new Date(yearValue, 0, 1);
+    const to = new Date(yearValue, 11, 31);
+    console.log(`   → Year range: ${from.toISOString()} to ${to.toISOString()}`);
+    return { from, to };
+  }, [period, weekDate, monthValue, yearValue]);
+
+  // Notify parent of range changes
+  React.useEffect(() => {
+    if (onDateRangeChange) {
+      onDateRangeChange(selectedRange);
+    }
+  }, [selectedRange, onDateRangeChange]);
+
+  // Compute period-based metrics
+  const viewSummary = useMemo(() => {
+    console.log('🔍 FinancialSummaryCard selectedRange:', selectedRange);
+    console.log('🔍 Period:', period);
+    console.log('🔍 Month value:', monthValue);
+    console.log('🔍 Year value:', yearValue);
+    return appData ? calculateFinancialSummary(appData as any, selectedRange) : summary || { revenue: 0, costs: 0, profit: 0 };
+  }, [appData, selectedRange, summary]);
+
+  const viewAdditionalFinancials = useMemo(() => {
+    return appData ? calculateAdditionalFinancials(appData as any, selectedRange) : additionalFinancials || { futureRevenue: 0, lostRevenue: 0 };
+  }, [appData, selectedRange, additionalFinancials]);
+
+  const viewTaskDetails = useMemo(() => {
+    return appData ? calculateTaskDetails(appData as any, selectedRange) : taskDetails || { revenueItems: [], costItems: [] };
+  }, [appData, selectedRange, taskDetails]);
+
+  const viewAdditionalTaskDetails = useMemo(() => {
+    return appData ? calculateAdditionalTaskDetails(appData as any, selectedRange) : additionalTaskDetails || { futureRevenueItems: [], lostRevenueItems: [] };
+  }, [appData, selectedRange, additionalTaskDetails]);
+
+  const viewFixedCostDetails = useMemo(() => {
+    const result = appData ? calculateFixedCostDetails(appData as any, selectedRange) : [];
+    return Array.isArray(result) ? result : result.fixedCostItems || [];
+  }, [appData, selectedRange]);
+
+  const frequencyLabels = {
+    once: 'One time',
+    weekly: 'Weekly',
+    monthly: 'Monthly',
+    yearly: 'Yearly'
+  };
+
+  const handleCardClick = (type: 'revenue' | 'costs' | 'future-revenue' | 'lost-revenue' | 'fixed-costs') => {
+    setDialogType(type);
+    setDialogOpen(true);
+  };
+
+
+
+  if (!summary && !appData) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{T.financialSummary}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Loading financial data...
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { revenue, costs, profit } = viewSummary;
+
+  const resolvedLocale = locale || (currency === 'VND' ? 'vi-VN' : 'en-US');
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat(resolvedLocale, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(value);
+
+  // Helper function to get status label from user settings or fallback to i18n
+  const getStatusLabel = (statusId: string): string => {
+    // Try to get from user-configured status settings
+    const statusSetting = appData?.appSettings?.statusSettings?.find((s: any) => s.id === statusId);
+    if (statusSetting?.label) {
+      return statusSetting.label;
+    }
+    // Fallback to i18n translations
+    if ((T.statuses as any)?.[statusId]) {
+      return (T.statuses as any)[statusId];
+    }
+    // Final fallback to status ID
+    return statusId;
+  };
+
+  return (
+    <TooltipProvider>
+      <Card className="bg-gradient-to-br from-background to-muted/30 border-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl font-bold flex items-center gap-2">
+            <DollarSign className="w-6 h-6 text-primary" />
+            {T.financialSummary}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+          {/* Elegant Period Selector */}
+          <div className="lg:col-span-3 mb-4">
+            <div className="bg-secondary/30 rounded-lg p-3 border border-border/50">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-foreground">{T.period}</span>
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    {(['all', 'week', 'month', 'year'] as Period[]).map(p => (
+                      <Button
+                        key={p}
+                        variant="ghost"
+                        size="sm"
+                        className={`h-8 px-3 text-xs rounded-none border-r border-border/30 last:border-r-0 ${period === p
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : 'hover:bg-secondary/60'
+                          }`}
+                        onClick={() => setPeriod(p)}
+                      >
+                        {p === 'all' ? (T.sinceBeginning || T.allTime) : p === 'week' ? T.week : p === 'month' ? T.month : T.year}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                {period !== 'all' && (
+                  <div className="flex items-center gap-2">
+                    {period === 'week' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{T.weekOf}:</span>
+                        <Input
+                          type="date"
+                          value={weekDate}
+                          onChange={(e) => setWeekDate(e.target.value)}
+                          className="h-8 text-xs w-[140px] bg-background border-border"
+                        />
+                      </div>
+                    )}
+                    {period === 'month' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{T.month}:</span>
+                        {/* Year Select for month period */}
+                        <Select
+                          value={monthValue.split('-')[0]}
+                          onValueChange={(newYear) => {
+                            const [, m] = monthValue.split('-');
+                            setMonthValue(`${newYear}-${m || '01'}`);
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-[90px] bg-background border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 15 }).map((_, idx) => {
+                              const y = now.getFullYear() - 10 + idx;
+                              return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+                            })}
+                          </SelectContent>
+                        </Select>
+                        {/* Month Select */}
+                        <Select
+                          value={monthValue.split('-')[1]}
+                          onValueChange={(newMonth) => {
+                            const [y] = monthValue.split('-');
+                            const mm = String(newMonth).padStart(2, '0');
+                            setMonthValue(`${y || String(now.getFullYear())}-${mm}`);
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs w-[90px] bg-background border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 12 }).map((_, i) => {
+                              const mm = String(i + 1).padStart(2, '0');
+                              return <SelectItem key={mm} value={mm}>{mm}</SelectItem>;
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {period === 'year' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{T.year}:</span>
+                        <Select value={String(yearValue)} onValueChange={(v) => setYearValue(Number(v))}>
+                          <SelectTrigger className="h-8 text-xs w-[100px] bg-background border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 15 }).map((_, idx) => {
+                              const y = now.getFullYear() - 10 + idx;
+                              return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4 border border-green-200 dark:border-green-800 cursor-pointer hover:shadow-lg transition-shadow group"
+            onClick={() => handleCardClick('revenue')}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-green-700 dark:text-green-300">{T.revenue}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="w-3 h-3 text-green-600 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {'Chỉ tính doanh thu từ quotes có trạng thái "Đã thanh toán"'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-green-600 flex-shrink-0" />
+                <Eye className="w-4 h-4 text-green-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </div>
+            <h3 className="text-2xl lg:text-3xl font-bold text-green-800 dark:text-green-200 break-all">{formatCurrency(revenue)}</h3>
+            <p className="text-xs text-green-600 dark:text-green-400 mt-2">{T.totalIncomeFromTasks}</p>
+          </div>
+
+          <div
+            className="bg-red-50 dark:bg-red-950/20 rounded-lg p-4 border border-red-200 dark:border-red-800 cursor-pointer hover:shadow-lg transition-shadow group"
+            onClick={() => handleCardClick('costs')}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-red-700 dark:text-red-300">{T.costs}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="w-3 h-3 text-red-600 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {'Chỉ tính chi phí cộng tác viên và chi tiêu có trạng thái "Đã thanh toán"'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex items-center gap-2">
+                <TrendingDown className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <Eye className="w-4 h-4 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </div>
+            <h3 className="text-2xl lg:text-3xl font-bold text-red-800 dark:text-red-200 break-all">{formatCurrency(costs)}</h3>
+            <p className="text-xs text-red-600 dark:text-red-400 mt-2">{T.collaboratorsAndExpenses}</p>
+          </div>
+
+          <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">{T.profit}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="w-3 h-3 text-blue-600 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {'Lợi nhuận = Doanh thu đã nhận - Chi phí đã thanh toán'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <TrendingUp className="w-5 h-5 text-blue-600 flex-shrink-0" />
+            </div>
+            <h3 className="text-2xl lg:text-3xl font-bold text-blue-800 dark:text-blue-200 break-all">{formatCurrency(profit)}</h3>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">{T.netRevenueAfterCosts}</p>
+          </div>
+        </CardContent>
+
+        {/* Additional Financial Metrics */}
+        {viewAdditionalFinancials && (
+          <CardContent className="pt-0">
+            <div className="grid gap-3 grid-cols-1 lg:grid-cols-3 mt-4 pt-4 border-t">
+              <div
+                className="bg-yellow-50 dark:bg-yellow-950/20 rounded-lg p-3 border border-yellow-200 dark:border-yellow-800 cursor-pointer hover:shadow-lg transition-shadow group"
+                onClick={() => handleCardClick('future-revenue')}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">{T.futureRevenue || 'Future Revenue'}</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3 h-3 text-yellow-600 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          {'Doanh thu tương lai = Tổng giá trị quotes có trạng thái "Chưa thanh toán"'}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+                    <Eye className="w-3 h-3 text-yellow-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+                <h4 className="text-lg font-bold text-yellow-800 dark:text-yellow-200 break-all">{formatCurrency(viewAdditionalFinancials.futureRevenue)}</h4>
+                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">{T.scheduledPayments || 'Scheduled payments'}</p>
+              </div>
+
+              <div
+                className="bg-orange-50 dark:bg-orange-950/20 rounded-lg p-3 border border-orange-200 dark:border-orange-800 cursor-pointer hover:shadow-lg transition-shadow group"
+                onClick={() => handleCardClick('lost-revenue')}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-orange-700 dark:text-orange-300">{T.lostRevenue || 'Lost Revenue'}</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3 h-3 text-orange-600 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          {'Doanh thu mất = Tổng giá trị quotes có trạng thái "On-hold"'}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                    <Eye className="w-3 h-3 text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+                <h4 className="text-lg font-bold text-orange-800 dark:text-orange-200 break-all">{formatCurrency(viewAdditionalFinancials.lostRevenue)}</h4>
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">{T.onHoldTasks || 'On-hold tasks'}</p>
+              </div>
+
+              {/* Fixed Costs Card */}
+              <div
+                className="bg-purple-50 dark:bg-purple-950/20 rounded-lg p-3 border border-purple-200 dark:border-purple-800 cursor-pointer hover:shadow-lg transition-shadow group"
+                onClick={() => handleCardClick('fixed-costs')}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Fixed Costs</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3 h-3 text-purple-600 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          {'Chi phí cố định được tính theo thời gian đã chọn'}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                    <Eye className="w-3 h-3 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </div>
+                <h4 className="text-lg font-bold text-purple-800 dark:text-purple-200 break-all">{formatCurrency(totalFixedCosts)}</h4>
+                <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">For selected period</p>
+              </div>
+            </div>
+          </CardContent>
+        )}
+
+        {/* Dialog for viewing details */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {dialogType === 'revenue' && <DollarSign className="w-5 h-5 text-green-600" />}
+                {dialogType === 'costs' && <TrendingDown className="w-5 h-5 text-red-600" />}
+                {dialogType === 'future-revenue' && <DollarSign className="w-5 h-5 text-yellow-600" />}
+                {dialogType === 'lost-revenue' && <TrendingDown className="w-5 h-5 text-orange-600" />}
+                {dialogType === 'fixed-costs' && <Settings className="w-5 h-5 text-purple-600" />}
+                {dialogType === 'revenue' && 'Revenue Details'}
+                {dialogType === 'costs' && 'Cost Details'}
+                {dialogType === 'future-revenue' && (T.futureRevenue || 'Future Revenue')}
+                {dialogType === 'lost-revenue' && (T.lostRevenue || 'Lost Revenue')}
+                {dialogType === 'fixed-costs' && 'Fixed Costs Management'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {dialogType === 'fixed-costs' ? (
+
+
+                <div className="py-2">
+                  <FixedCostsCard
+                    dateRange={selectedRange}
+                    currency={currency}
+                    locale={locale}
+                    embedded
+                  />
+                </div>
+              ) : (
+                // Existing task details logic
+                (dialogType === 'revenue' && viewTaskDetails) ? (
+                  <>
+                    {/* Revenue Summary Card */}
+                    <Card className="border border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-950/20">
+                      <CardContent className="py-3 flex items-center justify-between">
+                        <div className="text-sm font-medium text-green-700 dark:text-green-300">{T.totalRevenue || 'Total Revenue'}</div>
+                        <div className="text-lg font-semibold text-green-800 dark:text-green-200">{formatCurrency(revenue)}</div>
+                      </CardContent>
+                    </Card>
+
+                    {viewTaskDetails.revenueItems.length > 0 ? (
+                      viewTaskDetails.revenueItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
+                          onClick={() => onTaskClick?.(item.id)}
+                        >
+                          <div className="flex-1">
+                            <h4 className="font-medium text-green-800 dark:text-green-200">{item.name}</h4>
+                            <p className="text-sm text-green-600 dark:text-green-400">{item.clientName}</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            {formatCurrency(item.amount)}
+                          </Badge>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-muted-foreground py-8">{T.noRevenueTasksFound || 'No revenue tasks found'}</p>
+                    )}
+                  </>
+                ) : (dialogType === 'costs' && viewTaskDetails) ? (
+                  <>
+                    {/* Total Costs Summary Card */}
+                    <Card className="border-2 border-red-200 dark:border-red-800 bg-white dark:bg-gray-900">
+                      <CardContent className="py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-sm font-medium text-gray-800 dark:text-gray-200">{T.totalCosts || 'Total Costs'}</div>
+                          <div className="text-lg font-semibold text-red-800 dark:text-red-200">{formatCurrency(costs)}</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-red-600 dark:text-red-400">Fixed Costs:</span>
+                            <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(totalFixedCosts)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-red-600 dark:text-red-400">Collaborator Costs:</span>
+                            <span className="font-medium text-gray-800 dark:text-gray-200">{formatCurrency(costs - totalFixedCosts)}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Fixed Costs Collapsible Section */}
+                    {viewFixedCostDetails.length > 0 && (
+                      <details className="space-y-2">
+                        <summary className="cursor-pointer text-sm font-medium text-gray-800 dark:text-gray-200 border-b border-red-200 dark:border-red-700 pb-1 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
+                          Fixed Costs ({viewFixedCostDetails.length} items)
+                        </summary>
+                        <div className="space-y-2 mt-2">
+                          {viewFixedCostDetails.map((cost) => (
+                            <div
+                              key={cost.id}
+                              className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg border-2 border-red-200 dark:border-red-800"
+                            >
+                              <div className="flex-1">
+                                <h5 className="font-medium text-gray-800 dark:text-gray-200">{cost.name}</h5>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  {cost.frequency === 'once' ? 'One time' :
+                                    cost.frequency === 'weekly' ? 'Weekly' :
+                                      cost.frequency === 'monthly' ? 'Monthly' : 'Yearly'}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="border-red-200 text-gray-800 dark:border-red-700 dark:text-gray-200">
+                                {formatCurrency(cost.amount)}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {/* Collaborator Costs Section */}
+                    {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 border-b border-red-200 dark:border-red-700 pb-1">
+                          Collaborator Costs
+                        </h4>
+                        {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg border-2 border-red-200 dark:border-red-800 cursor-pointer hover:border-red-300 dark:hover:border-red-700 transition-colors"
+                            onClick={() => onTaskClick?.(item.id)}
+                          >
+                            <div className="flex-1">
+                              <h5 className="font-medium text-gray-800 dark:text-gray-200">{item.name}</h5>
+                              <p className="text-sm text-gray-600 dark:text-gray-400">{item.clientName}</p>
+                            </div>
+                            <Badge variant="outline" className="border-red-200 text-gray-800 dark:border-red-700 dark:text-gray-200">
+                              {formatCurrency(item.amount)}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Empty state if no costs */}
+                    {viewFixedCostDetails.length === 0 &&
+                      viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).length === 0 && (
+                        <p className="text-center text-muted-foreground py-8">{T.noCostTasksFound || 'No costs found'}</p>
+                      )}
+                  </>
+                ) : (dialogType === 'future-revenue' && viewAdditionalTaskDetails) ? (
+                  <>
+                    {/* Future Revenue Summary Card */}
+                    <Card className="border border-yellow-200 dark:border-yellow-800 bg-yellow-50/60 dark:bg-yellow-950/20">
+                      <CardContent className="py-3 flex items-center justify-between">
+                        <div className="text-sm font-medium text-yellow-700 dark:text-yellow-300">{T.futureRevenue || 'Total Future Revenue'}</div>
+                        <div className="text-lg font-semibold text-yellow-800 dark:text-yellow-200">{formatCurrency(viewAdditionalFinancials.futureRevenue)}</div>
+                      </CardContent>
+                    </Card>
+
+                    {viewAdditionalTaskDetails.futureRevenueItems.length > 0 ? (
+                      viewAdditionalTaskDetails.futureRevenueItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/30 transition-colors"
+                          onClick={() => onTaskClick?.(item.id)}
+                        >
+                          <div className="flex-1">
+                            <h4 className="font-medium text-yellow-800 dark:text-yellow-200">{item.name}</h4>
+                            <p className="text-sm text-yellow-600 dark:text-yellow-400">{item.clientName}</p>
+                            <p className="text-xs text-yellow-500 dark:text-yellow-500 mt-1">Status: {getStatusLabel(item.status || '')}</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                            {formatCurrency(item.amount)}
+                          </Badge>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-muted-foreground py-8">{'No future revenue tasks found'}</p>
+                    )}
+                  </>
+                ) : (dialogType === 'lost-revenue' && viewAdditionalTaskDetails) ? (
+                  <>
+                    {/* Lost Revenue Summary Card */}
+                    <Card className="border border-orange-200 dark:border-orange-800 bg-orange-50/60 dark:bg-orange-950/20">
+                      <CardContent className="py-3 flex items-center justify-between">
+                        <div className="text-sm font-medium text-orange-700 dark:text-orange-300">{'Total Lost Revenue'}</div>
+                        <div className="text-lg font-semibold text-orange-800 dark:text-orange-200">{formatCurrency(viewAdditionalFinancials.lostRevenue)}</div>
+                      </CardContent>
+                    </Card>
+
+                    {viewAdditionalTaskDetails.lostRevenueItems.length > 0 ? (
+                      viewAdditionalTaskDetails.lostRevenueItems.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/30 transition-colors"
+                          onClick={() => onTaskClick?.(item.id)}
+                        >
+                          <div className="flex-1">
+                            <h4 className="font-medium text-orange-800 dark:text-orange-200">{item.name}</h4>
+                            <p className="text-sm text-orange-600 dark:text-orange-400">{item.clientName}</p>
+                            <p className="text-xs text-orange-500 dark:text-orange-500 mt-1">Status: {getStatusLabel(item.status || '')}</p>
+                          </div>
+                          <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200">
+                            {formatCurrency(item.amount)}
+                          </Badge>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-muted-foreground py-8">{'No lost revenue tasks found'}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">{T.noDataAvailable || 'No data available'}</p>
+                )
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </Card>
+    </TooltipProvider >
+  );
+}
