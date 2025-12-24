@@ -44,7 +44,7 @@ If you want to run this project locally or contribute:
 
 1.  **Clone the repo**
     ```bash
-    git clone https://github.com/manhhuynh-designer/Freelance-Flow.git
+    git clone https://github.com/Manh-Huynh-PP/Freelance-Flow.git
     cd Freelance-Flow
     ```
 
@@ -103,7 +103,7 @@ Nếu bạn muốn chạy thử dự án trên máy cá nhân:
 
 1.  **Tải mã nguồn**
     ```bash
-    git clone https://github.com/manhhuynh-designer/Freelance-Flow.git
+    git clone https://github.com/Manh-Huynh-PP/Freelance-Flow.git
     cd Freelance-Flow
     ```
 

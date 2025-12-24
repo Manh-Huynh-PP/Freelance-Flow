@@ -112,7 +112,7 @@ export const docsTranslations = {
                 {
                     title: "Clone the Repository",
                     desc: "Open your terminal and run the following command to clone the repository:",
-                    code: "git clone https://github.com/manhhuynh-designer/Freelance-Flow.git\ncd Freelance-Flow"
+                    code: "git clone https://github.com/Manh-Huynh-PP/Freelance-Flow.git\ncd Freelance-Flow"
                 },
                 {
                     title: "Install Dependencies",
@@ -1074,7 +1074,7 @@ export const docsTranslations = {
                 {
                     title: "Clone Repository",
                     desc: "Mở terminal và chạy lệnh sau để clone repository:",
-                    code: "git clone https://github.com/manhhuynh-designer/Freelance-Flow.git\ncd Freelance-Flow"
+                    code: "git clone https://github.com/Manh-Huynh-PP/Freelance-Flow.git\ncd Freelance-Flow"
                 },
                 {
                     title: "Cài đặt Dependencies",
