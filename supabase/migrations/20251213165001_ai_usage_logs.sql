@@ -25,10 +25,14 @@ create policy "Users can view own usage"
 -- So no INSERT policy needed for public.
 
 -- Function to cleanup old logs (Retention Policy: 7 days)
-create or replace function cleanup_old_ai_logs()
-returns void as $$
+create or replace function public.cleanup_old_ai_logs()
+returns void 
+language plpgsql 
+security definer
+set search_path = ''
+as $$
 begin
-  delete from ai_usage_logs
+  delete from public.ai_usage_logs
   where created_at < now() - interval '7 days';
 end;
-$$ language plpgsql security definer;
+$$;

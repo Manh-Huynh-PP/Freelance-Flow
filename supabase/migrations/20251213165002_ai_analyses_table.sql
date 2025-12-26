@@ -26,23 +26,27 @@ create policy "Users can delete own analyses"
   using (auth.uid() = user_id);
 
 -- Trigger Function to limit rows per user to 10
-create or replace function maintain_ai_analysis_limit() returns trigger as $$
+create or replace function public.maintain_ai_analysis_limit() returns trigger 
+language plpgsql 
+security definer
+set search_path = ''
+as $$
 begin
   -- Delete oldest records if count > 10
-  delete from ai_analyses
+  delete from public.ai_analyses
   where id in (
-    select id from ai_analyses
+    select id from public.ai_analyses
     where user_id = NEW.user_id
     order by created_at desc
     offset 10
   );
   return NEW;
 end;
-$$ language plpgsql security definer;
+$$;
 
 -- Drop trigger if exists to allow cleaner re-runs
-drop trigger if exists enforce_analysis_limit on ai_analyses;
+drop trigger if exists enforce_analysis_limit on public.ai_analyses;
 
 create trigger enforce_analysis_limit
-after insert on ai_analyses
-for each row execute function maintain_ai_analysis_limit();
+after insert on public.ai_analyses
+for each row execute function public.maintain_ai_analysis_limit();

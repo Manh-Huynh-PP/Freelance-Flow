@@ -45,3 +45,7 @@ next-env.d.ts
 .vscode/tasks.json
 /data
 .github
+# Supabase SQL dumps
+supabase-shares-schema.sql
+supabase-schema.sql
+supabase/schema.sql
