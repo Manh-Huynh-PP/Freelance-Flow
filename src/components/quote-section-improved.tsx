@@ -90,6 +90,25 @@ const createInitialTimelineData = (startDate?: Date, endDate?: Date, itemIndex =
   });
 };
 
+// Number formatting helpers for thousand separators
+const formatNumberDisplay = (value: any): string => {
+  if (value === '' || value === null || value === undefined) return '';
+  // Handle already formatted strings (with commas)
+  const cleaned = String(value).replace(/,/g, '');
+  const num = parseFloat(cleaned);
+  if (isNaN(num)) return String(value);
+  // Use toLocaleString for consistent formatting (1,000,000)
+  return num.toLocaleString('en-US', { maximumFractionDigits: 10 });
+};
+
+const parseFormattedNumber = (formatted: string): number => {
+  if (!formatted || formatted === '') return 0;
+  // Remove thousand separators (commas) and parse
+  const cleaned = String(formatted).replace(/,/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
 // Timeline Editor Component
 const TimelineEditor = ({ field, taskStartDate, taskEndDate }: {
   field: any;
@@ -897,11 +916,27 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                                     taskStartDate={taskStartDate}
                                     taskEndDate={taskEndDate}
                                   />
+                                ) : col.type === 'number' ? (
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={formatNumberDisplay(field.value)}
+                                    onChange={(e) => {
+                                      // Allow only digits, commas, dots, and minus sign
+                                      const raw = e.target.value.replace(/[^0-9.,\-]/g, '');
+                                      field.onChange(parseFormattedNumber(raw));
+                                    }}
+                                    onBlur={() => {
+                                      // Re-format on blur to ensure consistency
+                                      field.onChange(parseFormattedNumber(String(field.value)));
+                                    }}
+                                    className="border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 shadow-none text-right font-mono"
+                                  />
                                 ) : (
                                   <Input
                                     type={col.type === 'date' ? 'text' : col.type}
                                     {...field}
-                                    value={field.value || (col.type === 'number' ? '0' : '')}
+                                    value={field.value || ''}
                                     className="border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 shadow-none"
                                   />
                                 )}
