@@ -1282,7 +1282,12 @@ export function TaskDetailsDialog({
       const newStatus = allStatuses.find(s => s.id === newStatusId);
       // optimistic update
       setCurrentStatusId(newStatusId);
-      onChangeStatus?.(task.id, newStatusId);
+      // Use onChangeStatus if provided, otherwise fallback to stableUpdateTaskHandler
+      if (onChangeStatus) {
+        onChangeStatus(task.id, newStatusId);
+      } else {
+        stableUpdateTaskHandler({ id: task.id, status: newStatusId as Task['status'] });
+      }
       toast({
         title: T.statusUpdated || "Status updated",
         description: `${T.task || "Task"} → ${(newStatus as any)?.label || (T.statuses as any)?.[newStatusId] || newStatusId}`,
@@ -1290,7 +1295,7 @@ export function TaskDetailsDialog({
     } catch (e) {
       toast({ variant: "destructive", title: T.error || "Error", description: T.updateFailed || "Failed to update status" });
     }
-  }, [task.id, currentStatusId, allStatuses, onChangeStatus, toast, T]);
+  }, [task.id, currentStatusId, allStatuses, onChangeStatus, stableUpdateTaskHandler, toast, T]);
 
   const copyQuoteToClipboard = useCallback((quoteToCopy: Quote | undefined) => {
     if (!quoteToCopy) return;

@@ -2,6 +2,7 @@
 import type { AppData, Task, Quote, CollaboratorQuote, Client, QuoteColumn } from '@/lib/types';
 import { DateRange } from 'react-day-picker';
 import { i18n } from '@/lib/i18n';
+import { safeEval } from '@/lib/helpers/formula-parser';
 
 // Helper: derive the "paid date" for a main quote.
 // Priority: explicit quote.paidDate -> earliest paid payment.date -> undefined
@@ -81,8 +82,7 @@ export function calculateFinancialSummary(appData: AppData, dateRange: { from?: 
         });
         let expr = column.rowFormula;
         Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
-        // eslint-disable-next-line no-eval
-        const result = eval(expr);
+        const result = safeEval(expr);
         return !isNaN(result) ? Number(result) : 0;
       }
       if (column.id === 'unitPrice') return Number(item.unitPrice) || 0;
@@ -340,8 +340,7 @@ export function calculateRevenueBreakdown(appData: AppData, dateRange: { from?: 
           });
           let expr = unitCol.rowFormula as string;
           Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
-          // eslint-disable-next-line no-eval
-          const r = eval(expr);
+          const r = safeEval(expr);
           return ia + (!isNaN(r) ? Number(r) : 0);
         }
         return ia + (Number(it.unitPrice) || 0);
@@ -477,8 +476,7 @@ export function calculateTaskDetails(appData: AppData, dateRange: { from?: Date;
               });
               let expr = unitCol.rowFormula as string;
               Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
-              // eslint-disable-next-line no-eval
-              const r = eval(expr);
+              const r = safeEval(expr);
               return ia + (!isNaN(r) ? Number(r) : 0);
             }
             return ia + (Number(it.unitPrice) || 0);
@@ -551,8 +549,7 @@ export function calculateTaskDetails(appData: AppData, dateRange: { from?: Date;
                 });
                 let expr = (unitCol as any).rowFormula as string;
                 Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
-                // eslint-disable-next-line no-eval
-                const r = eval(expr);
+                const r = safeEval(expr);
                 return ia + (!isNaN(r) ? Number(r) : 0);
               }
               return ia + (Number((it as any).unitPrice) || 0);
@@ -614,7 +611,7 @@ export function calculateAdditionalFinancials(appData: AppData, dateRange: { fro
     return q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + (unitCol ? (unitCol.rowFormula ? (() => {
       try {
         let expr = unitCol.rowFormula as any; const rowVals: Record<string, number> = {}; cols.forEach(c => { if (c.type === 'number' && c.id !== unitCol.id) { const val = c.id === 'unitPrice' ? Number(it.unitPrice) || 0 : Number(it.customFields?.[c.id]) || 0; rowVals[c.id] = val; } }); Object.entries(rowVals).forEach(([cid, val]) => { expr = (expr as string).replaceAll(cid, String(val)); }); // eslint-disable-next-line no-eval
-        const r = eval(expr as string); return !isNaN(r) ? Number(r) : 0;
+        const r = safeEval(expr as string); return !isNaN(r) ? Number(r) : 0;
       } catch { return 0; }
     })() : Number(it.unitPrice) || 0) : 0), 0) || 0), 0);
   };
@@ -699,7 +696,7 @@ export function calculateAdditionalTaskDetails(appData: AppData, dateRange: { fr
     const cols = (q.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
     const unitCol = cols.find(c => c.id === 'unitPrice');
     if (!unitCol) return 0;
-    return q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + (unitCol ? (unitCol.rowFormula ? (() => { try { let expr = unitCol.rowFormula as any; const rowVals: Record<string, number> = {}; cols.forEach(c => { if (c.type === 'number' && c.id !== unitCol.id) { const val = c.id === 'unitPrice' ? Number(it.unitPrice) || 0 : Number(it.customFields?.[c.id]) || 0; rowVals[c.id] = val; } }); Object.entries(rowVals).forEach(([cid, val]) => { expr = (expr as string).replaceAll(cid, String(val)); }); const r = eval(expr as string); return !isNaN(r) ? Number(r) : 0; } catch { return 0; } })() : Number(it.unitPrice) || 0) : 0), 0) || 0), 0);
+    return q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + (unitCol ? (unitCol.rowFormula ? (() => { try { let expr = unitCol.rowFormula as any; const rowVals: Record<string, number> = {}; cols.forEach(c => { if (c.type === 'number' && c.id !== unitCol.id) { const val = c.id === 'unitPrice' ? Number(it.unitPrice) || 0 : Number(it.customFields?.[c.id]) || 0; rowVals[c.id] = val; } }); Object.entries(rowVals).forEach(([cid, val]) => { expr = (expr as string).replaceAll(cid, String(val)); }); const r = safeEval(expr as string); return !isNaN(r) ? Number(r) : 0; } catch { return 0; } })() : Number(it.unitPrice) || 0) : 0), 0) || 0), 0);
   };
 
   const sumRemainingPayments = (q: Quote, totalHint?: number): number => {
@@ -909,7 +906,7 @@ export function calculateMonthlyFinancials(appData: AppData, dateRange: { from?:
         let expr = (column as any).rowFormula as string;
         Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
         // eslint-disable-next-line no-eval
-        const r = eval(expr);
+        const r = safeEval(expr);
         return !isNaN(r) ? Number(r) : 0;
       }
       if (column.id === 'unitPrice') return Number(item.unitPrice) || 0;
