@@ -191,78 +191,8 @@ export function calculateFinancialSummary(appData: AppData, dateRange: { from?: 
     } catch { return 0; }
   };
 
-  const computeQuoteTotal = (q?: Quote): number => {
-    if (!q?.sections) return 0;
-    const cols = (q.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
-    const unitCol = cols.find(c => c.id === 'unitPrice');
-    if (!unitCol) return 0;
-
-    // Calculate base priceSum (sum of unitPrice column)
-    const priceSum = q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + calcRowVal(it, unitCol, cols), 0) || 0), 0);
-
-    // If no grandTotalFormula, return priceSum
-    const formulaSrc = (q as any).grandTotalFormula as string | undefined;
-    if (!formulaSrc || formulaSrc.trim() === '') {
-      return priceSum;
-    }
-
-    // Process grandTotalFormula with variable substitution
-    try {
-      let formula = formulaSrc;
-
-      // Auto-add + between adjacent variables (e.g., {QuantitySum}{PriceAvg} becomes {QuantitySum}+{PriceAvg})
-      formula = formula.replace(/(\})\s*(\{)/g, '}+{');
-
-      // Calculate column calculation results (Sum, Average, Formula for each column)
-      const calculationResults: { id: string; name: string; type: string; result: number }[] = [];
-      cols.forEach(col => {
-        if (col.type === 'number' && col.calculation) {
-          let result = 0;
-          const allValues = q.sections.flatMap(sec =>
-            (sec.items || []).map(it => calcRowVal(it, col, cols))
-          );
-
-          if (col.calculation.type === 'sum') {
-            result = allValues.reduce((a, b) => a + b, 0);
-          } else if (col.calculation.type === 'average') {
-            result = allValues.length > 0 ? allValues.reduce((a, b) => a + b, 0) / allValues.length : 0;
-          } else if (col.calculation.type === 'custom' && col.calculation.formula) {
-            // Support column-level formulas
-            try {
-              let colFormula = col.calculation.formula;
-              const colSum = allValues.reduce((a, b) => a + b, 0);
-              colFormula = colFormula.replace(/@sum/gi, colSum.toString());
-              colFormula = colFormula.replace(/@count/gi, allValues.length.toString());
-              result = safeEval(colFormula);
-            } catch { result = 0; }
-          }
-          calculationResults.push({ id: col.id, name: col.name, type: col.calculation.type, result });
-        }
-      });
-
-      // Support system variables
-      formula = formula
-        .replace(/\{Price\}/g, priceSum.toString())
-        .replace(/\{P\}/g, priceSum.toString())
-        .replace(/\{\s*priceSum\s*\}/g, priceSum.toString());
-
-      // Support column calculation results using column names
-      calculationResults.forEach((calc, index) => {
-        const value = typeof calc.result === 'number' ? calc.result : 0;
-        const varName = calc.name.replace(/\s+/g, '');
-        formula = formula.replaceAll(`{${varName}}`, value.toString());
-        formula = formula.replaceAll(`{${varName}Calc}`, value.toString());
-        formula = formula.replaceAll(`{${String.fromCharCode(65 + index)}}`, value.toString());
-        formula = formula.replaceAll(`{${calc.id}}`, value.toString());
-      });
-
-      const result = safeEval(formula);
-      if (typeof result === 'number' && !isNaN(result)) return result;
-      return priceSum; // Fallback if formula fails
-    } catch {
-      return priceSum; // Fallback if formula processing fails
-    }
-  };
+  // Use shared helper with grandTotalFormula support
+  const computeQuoteTotal = (q?: Quote): number => computeQuoteTotalWithFormula(q);
 
   const computeCollabQuoteTotal = (cq?: CollaboratorQuote): number => {
     if (!cq) return 0;
