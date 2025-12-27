@@ -43,6 +43,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { vi, en } from "@/lib/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { safeEval } from "@/lib/helpers/formula-parser";
 
 // Helper function to create valid timeline data for new items
 const createInitialTimelineData = (startDate?: Date, endDate?: Date, itemIndex = 0, totalItems = 1) => {
@@ -188,8 +189,7 @@ export const QuoteManager = ({
                 expr = expr.replaceAll(cid, val.toString());
               });
 
-              // eslint-disable-next-line no-eval
-              const result = eval(expr);
+              const result = safeEval(expr);
               return !isNaN(result) ? Number(result) : 0;
             } catch {
               return 0; // Default to 0 if formula fails
@@ -239,7 +239,7 @@ export const QuoteManager = ({
                   expr = expr.replaceAll(cid, sum.toString());
                 }
               });
-              result = eval(expr);
+              result = safeEval(expr);
               calculation = T.customFormula || 'Tùy chỉnh';
             } catch {
               result = T.error || 'Lỗi';
@@ -302,8 +302,7 @@ export const QuoteManager = ({
               expr = expr.replaceAll(cid, val.toString());
             });
 
-            // eslint-disable-next-line no-eval
-            const result = eval(expr);
+            const result = safeEval(expr);
             value = !isNaN(result) ? Number(result) : 0;
           } catch {
             value = 0; // Default to 0 if formula fails
@@ -348,8 +347,7 @@ export const QuoteManager = ({
                   Object.entries(rowVals).forEach(([cid, val]) => {
                     expr = expr.replaceAll(cid, val.toString());
                   });
-                  // eslint-disable-next-line no-eval
-                  const result = eval(expr);
+                  const result = safeEval(expr);
                   return itemAcc + (!isNaN(result) ? Number(result) : 0);
                 } catch {
                   return itemAcc + (Number(item.unitPrice) || 0);
@@ -406,8 +404,7 @@ export const QuoteManager = ({
         // Note: Column totals without calculations are no longer supported
         // Only calculation results and system variables (Price, Collab) are available
 
-        // eslint-disable-next-line no-eval
-        const result = eval(formula);
+        const result = safeEval(formula);
         setGrandTotalError('');
         if (typeof result === 'number' && !isNaN(result)) return result;
         setGrandTotalError(T.invalidFormula || 'Công thức không hợp lệ hoặc không trả về số.');

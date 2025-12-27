@@ -67,6 +67,7 @@ import type { QuoteColumn } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { safeEval } from "@/lib/helpers/formula-parser";
 
 // Helper function to create valid timeline data for new items
 const createInitialTimelineData = (startDate?: Date, endDate?: Date, itemIndex = 0, totalItems = 1) => {
@@ -364,7 +365,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                   const sum = vals.reduce((acc: number, v: any) => acc + (parseFloat(v) || 0), 0);
                   expr = expr.replaceAll(cid, sum.toString());
                 });
-                result = eval(expr);
+                result = safeEval(expr);
               } catch {
                 result = (T as any).error;
               }
@@ -870,8 +871,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                           Object.entries(rowVals).forEach(([cid, val]) => {
                             expr = expr.replaceAll(cid, val.toString());
                           });
-                          // eslint-disable-next-line no-eval
-                          const result = eval(expr);
+                          const result = safeEval(expr);
                           return (
                             <div className="flex items-center gap-2">
                               <span className="font-mono text-sm text-blue-600">

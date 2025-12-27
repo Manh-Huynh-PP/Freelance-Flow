@@ -3,6 +3,7 @@
 import React from 'react';
 import ShareExportButtons from './ShareExportButtons';
 import type { Task, Quote, AppSettings, Client, Category, QuoteColumn, Milestone, ColumnCalculationType } from '@/lib/types';
+import { safeEval } from '@/lib/helpers/formula-parser';
 
 interface SharePageClientWrapperProps {
   task: Task;
@@ -39,8 +40,8 @@ export default function SharePageClientWrapper({
         const rowVals: Record<string, number> = {};
         allColumns.forEach((c: any) => {
           if (c.type === 'number') {
-            const val = c.id === 'unitPrice' 
-              ? Number(item.unitPrice) || 0 
+            const val = c.id === 'unitPrice'
+              ? Number(item.unitPrice) || 0
               : Number(item.customFields?.[c.id]) || 0;
             rowVals[c.id] = val;
           }
@@ -49,7 +50,7 @@ export default function SharePageClientWrapper({
         Object.entries(rowVals).forEach(([cid, val]) => {
           expr = expr.replaceAll(cid, String(val));
         });
-        const result = eval(expr);
+        const result = safeEval(expr);
         return !isNaN(result) ? Number(result) : 0;
       } catch {
         return 0;
@@ -66,7 +67,7 @@ export default function SharePageClientWrapper({
   // Calculate calculation results
   const calculationResults = React.useMemo(() => {
     if (!quote?.sections) return [];
-    
+
     const results: Array<{
       id: string;
       name: string;
@@ -75,12 +76,12 @@ export default function SharePageClientWrapper({
       type: ColumnCalculationType;
     }> = [];
 
-    (quote.columns || defaultColumns).filter(col => 
+    (quote.columns || defaultColumns).filter(col =>
       col.calculation && col.calculation.type && col.calculation.type !== 'none' && col.type === 'number'
     ).forEach(col => {
       if (!col.calculation) return;
 
-      const allValues = quote.sections!.flatMap((section) => 
+      const allValues = quote.sections!.flatMap((section) =>
         (section.items || []).map((item) => calculateRowValue(item, col, quote.columns || defaultColumns))
           .filter((v: number) => !isNaN(v))
       );
@@ -112,7 +113,7 @@ export default function SharePageClientWrapper({
               const colMap: Record<string, number> = {};
               (quote.columns || defaultColumns).forEach(c => {
                 if (c.type === 'number') {
-                  const vals = quote.sections!.flatMap(s => 
+                  const vals = quote.sections!.flatMap(s =>
                     (s.items || []).map(item => calculateRowValue(item, c, quote.columns || defaultColumns))
                   ).filter(v => !isNaN(v));
                   colMap[c.id] = vals.reduce((a, b) => a + b, 0);
@@ -122,7 +123,7 @@ export default function SharePageClientWrapper({
               Object.entries(colMap).forEach(([id, val]) => {
                 expr = expr.replaceAll(id, String(val));
               });
-              const evalResult = eval(expr);
+              const evalResult = safeEval(expr);
               result = !isNaN(evalResult) ? Number(evalResult) : 0;
               calculation = col.calculation.formula;
             } catch {
@@ -164,14 +165,14 @@ export default function SharePageClientWrapper({
     if (!quote?.sections || !quote.columns?.some(col => col.id === 'timeline')) {
       return task.milestones || [];
     }
-    
+
     const extracted: Milestone[] = [];
-    
+
     quote.sections.forEach((section, sectionIndex) => {
       const items = section.items || [];
       items.forEach((item, itemIndex) => {
         let timelineValue = item.customFields?.timeline;
-        
+
         if (typeof timelineValue === 'string' && timelineValue.trim() !== '') {
           try {
             timelineValue = JSON.parse(timelineValue);
@@ -179,19 +180,19 @@ export default function SharePageClientWrapper({
             return;
           }
         }
-        
-        if (timelineValue && 
-            typeof timelineValue === 'object' && 
-            timelineValue !== null &&
-            timelineValue.start && 
-            timelineValue.end) {
-          
+
+        if (timelineValue &&
+          typeof timelineValue === 'object' &&
+          timelineValue !== null &&
+          timelineValue.start &&
+          timelineValue.end) {
+
           const sectionIdForMilestone = section.id || `section-${sectionIndex}`;
           const itemIdForMilestone = item.id || `item-${itemIndex}`;
           const milestoneId = `${sectionIdForMilestone}-${itemIdForMilestone}`;
-          
+
           const timelineData = timelineValue as { start: string; end: string; color?: string };
-          
+
           extracted.push({
             id: milestoneId,
             name: item.description || `${section.name || 'Section'} - Item ${itemIndex + 1}`,
@@ -203,7 +204,7 @@ export default function SharePageClientWrapper({
         }
       });
     });
-    
+
     return extracted.length > 0 ? extracted : (task.milestones || []);
   }, [quote, task.milestones]);
 

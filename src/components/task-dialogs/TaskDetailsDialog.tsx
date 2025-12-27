@@ -64,6 +64,7 @@ import { CalculatorDialog } from "@/components/calculator-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileDown } from "lucide-react";
 import exportProjectReportToPdf from "@/lib/exports/exportProjectReportToPdf";
+import { safeEval } from "@/lib/helpers/formula-parser";
 
 
 
@@ -831,7 +832,7 @@ export function TaskDetailsDialog({
           expr = expr.replaceAll(cid, val.toString());
         });
 
-        const result = eval(expr);
+        const result = safeEval(expr);
         return !isNaN(result) ? Number(result) : 0;
       } catch {
         return 0;
@@ -929,7 +930,7 @@ export function TaskDetailsDialog({
             if (col.calculation.formula) {
               // Simple eval for custom formulas - in production, use a proper expression parser
               const formula = col.calculation.formula.replace(/values/g, JSON.stringify(allValues));
-              result = eval(formula) || 0;
+              result = safeEval(formula) || 0;
             } else {
               result = 0;
             }
@@ -981,7 +982,7 @@ export function TaskDetailsDialog({
         });
 
         // eslint-disable-next-line no-eval
-        const result = eval(formula);
+        const result = safeEval(formula);
         if (typeof result === 'number' && !isNaN(result)) return result;
         return totalQuote;
       } catch {
@@ -1042,7 +1043,7 @@ export function TaskDetailsDialog({
             try {
               if (col.calculation.formula) {
                 const formula = col.calculation.formula.replace(/values/g, JSON.stringify(allValues));
-                result = eval(formula) || 0;
+                result = safeEval(formula) || 0;
               } else {
                 result = 0;
               }

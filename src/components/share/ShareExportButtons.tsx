@@ -9,6 +9,7 @@ import exportTimelineToClipboard from '@/lib/exports/exportTimelineToClipboard';
 import exportQuoteToExcel from '@/lib/exports/exportQuoteToExcel';
 import exportTimelineToExcel from '@/lib/exports/exportTimelineToExcel';
 import type { Task, Quote, AppSettings, Client, Category, QuoteColumn, Milestone } from '@/lib/types';
+import { safeEval } from '@/lib/helpers/formula-parser';
 
 interface ShareExportButtonsProps {
   task: Task;
@@ -52,8 +53,8 @@ export default function ShareExportButtons({
         const rowVals: Record<string, number> = {};
         allColumns.forEach((c: any) => {
           if (c.type === 'number') {
-            const val = c.id === 'unitPrice' 
-              ? Number(item.unitPrice) || 0 
+            const val = c.id === 'unitPrice'
+              ? Number(item.unitPrice) || 0
               : Number(item.customFields?.[c.id]) || 0;
             rowVals[c.id] = val;
           }
@@ -62,7 +63,7 @@ export default function ShareExportButtons({
         Object.entries(rowVals).forEach(([cid, val]) => {
           expr = expr.replaceAll(cid, String(val));
         });
-        const result = eval(expr);
+        const result = safeEval(expr);
         return !isNaN(result) ? Number(result) : 0;
       } catch {
         return 0;
@@ -78,11 +79,11 @@ export default function ShareExportButtons({
 
   const handleExportQuoteImage = async () => {
     if (!quote) return;
-    
+
     setExportingImage(true);
     try {
       toast({ title: T.exportPreparing || 'Preparing image...' });
-      
+
       await exportQuoteImageToClipboard({
         quote,
         task,
@@ -95,17 +96,17 @@ export default function ShareExportButtons({
         calculateRowValue,
         grandTotal,
       });
-      
-      toast({ 
-        title: T.exportCopied || 'Image copied to clipboard', 
-        description: T.exportCopiedDesc || 'You can paste the image into an email or document.' 
+
+      toast({
+        title: T.exportCopied || 'Image copied to clipboard',
+        description: T.exportCopiedDesc || 'You can paste the image into an email or document.'
       });
     } catch (err: any) {
       console.error('Export quote image failed', err);
-      toast({ 
-        variant: 'destructive', 
-        title: T.exportFailed || 'Export failed', 
-        description: err?.message || String(err) 
+      toast({
+        variant: 'destructive',
+        title: T.exportFailed || 'Export failed',
+        description: err?.message || String(err)
       });
     } finally {
       setExportingImage(false);
@@ -116,7 +117,7 @@ export default function ShareExportButtons({
     setExportingImage(true);
     try {
       toast({ title: T.exportPreparing || 'Preparing timeline image...' });
-      
+
       await exportTimelineToClipboard({
         task,
         quote,
@@ -129,17 +130,17 @@ export default function ShareExportButtons({
         displayDate: new Date(),
         fileName: `timeline-${task.id || 'export'}.png`,
       });
-      
-      toast({ 
-        title: T.exportCopied || 'Timeline image copied to clipboard', 
-        description: T.exportCopiedDesc || 'You can paste the image into an email or document.' 
+
+      toast({
+        title: T.exportCopied || 'Timeline image copied to clipboard',
+        description: T.exportCopiedDesc || 'You can paste the image into an email or document.'
       });
     } catch (err: any) {
       console.error('Export timeline image failed', err);
-      toast({ 
-        variant: 'destructive', 
-        title: T.exportFailed || 'Export failed', 
-        description: err?.message || String(err) 
+      toast({
+        variant: 'destructive',
+        title: T.exportFailed || 'Export failed',
+        description: err?.message || String(err)
       });
     } finally {
       setExportingImage(false);
@@ -148,11 +149,11 @@ export default function ShareExportButtons({
 
   const handleExportQuoteToExcel = async () => {
     if (!quote) return;
-    
+
     setExportingExcel(true);
     try {
       toast({ title: T.exportPreparing || 'Preparing Excel data...' });
-      
+
       await exportQuoteToExcel({
         quote,
         task,
@@ -165,17 +166,17 @@ export default function ShareExportButtons({
         grandTotal,
         T,
       });
-      
-      toast({ 
-        title: T.exportCopiedExcel || 'Data copied to clipboard', 
-        description: T.exportCopiedExcelDesc || 'You can now paste into Excel or Google Sheets.' 
+
+      toast({
+        title: T.exportCopiedExcel || 'Data copied to clipboard',
+        description: T.exportCopiedExcelDesc || 'You can now paste into Excel or Google Sheets.'
       });
     } catch (err: any) {
       console.error('Export quote to Excel failed', err);
-      toast({ 
-        variant: 'destructive', 
-        title: T.exportFailed || 'Export failed', 
-        description: err?.message || String(err) 
+      toast({
+        variant: 'destructive',
+        title: T.exportFailed || 'Export failed',
+        description: err?.message || String(err)
       });
     } finally {
       setExportingExcel(false);
@@ -186,7 +187,7 @@ export default function ShareExportButtons({
     setExportingExcel(true);
     try {
       toast({ title: T.exportPreparing || 'Preparing Excel data...' });
-      
+
       await exportTimelineToExcel({
         task,
         quote,
@@ -194,17 +195,17 @@ export default function ShareExportButtons({
         settings,
         T,
       });
-      
-      toast({ 
-        title: T.exportCopiedExcel || 'Data copied to clipboard', 
-        description: T.exportCopiedExcelDesc || 'You can now paste into Excel or Google Sheets.' 
+
+      toast({
+        title: T.exportCopiedExcel || 'Data copied to clipboard',
+        description: T.exportCopiedExcelDesc || 'You can now paste into Excel or Google Sheets.'
       });
     } catch (err: any) {
       console.error('Export timeline to Excel failed', err);
-      toast({ 
-        variant: 'destructive', 
-        title: T.exportFailed || 'Export failed', 
-        description: err?.message || String(err) 
+      toast({
+        variant: 'destructive',
+        title: T.exportFailed || 'Export failed',
+        description: err?.message || String(err)
       });
     } finally {
       setExportingExcel(false);

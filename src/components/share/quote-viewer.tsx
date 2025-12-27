@@ -3,6 +3,7 @@
 import React from 'react';
 import { AppSettings, Category, Client, Quote, QuoteColumn, QuoteItem, Task } from '@/lib/types';
 import { i18n } from '@/lib/i18n';
+import { safeEval } from '@/lib/helpers/formula-parser';
 
 type Props = {
   quote: Quote;
@@ -35,7 +36,7 @@ function calcRowValue(item: QuoteItem, column: QuoteColumn, allColumns: QuoteCol
       });
       let expr = String(column.rowFormula);
       Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
-      const result = eval(expr);
+      const result = safeEval(expr);
       return !isNaN(result) ? Number(result) : 0;
     } catch { return 0; }
   }
