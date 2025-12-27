@@ -220,6 +220,8 @@ export class SupabaseDataService {
             paidDate: extraData.paidDate,
             paymentMethod: extraData.paymentMethod,
             paymentNotes: extraData.paymentNotes,
+            // FIXED: Restore grandTotalFormula for summary calculations
+            grandTotalFormula: extraData.grandTotalFormula,
           };
         }) as Quote[],
         workSessions: workSessions.map((session: any) => ({

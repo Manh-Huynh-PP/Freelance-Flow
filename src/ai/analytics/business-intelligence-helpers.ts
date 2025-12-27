@@ -21,6 +21,107 @@ function getMainQuotePaidDate(q?: Quote): string | undefined {
   return undefined;
 }
 
+// --- SHARED HELPER: Calculate quote total with grandTotalFormula support ---
+// This helper calculates the row value for a given item and column
+function calcRowValShared(item: any, column: QuoteColumn, allCols: QuoteColumn[]): number {
+  try {
+    if (column.rowFormula) {
+      const rowVals: Record<string, number> = {};
+      allCols.forEach(c => {
+        if (c.type === 'number' && c.id !== column.id) {
+          const val = c.id === 'unitPrice' ? Number(item.unitPrice) || 0 : Number(item.customFields?.[c.id]) || 0;
+          rowVals[c.id] = val;
+        }
+      });
+      let expr = column.rowFormula;
+      Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
+      const result = safeEval(expr);
+      return !isNaN(result) ? Number(result) : 0;
+    }
+    if (column.id === 'unitPrice') return Number(item.unitPrice) || 0;
+    return Number(item.customFields?.[column.id]) || 0;
+  } catch { return 0; }
+}
+
+// Shared function to compute quote total with grandTotalFormula support
+export function computeQuoteTotalWithFormula(q?: Quote): number {
+  if (!q?.sections) return (q as any)?.total || 0;
+  const cols = (q.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
+
+  // Find unitPrice column OR fallback to any number column with sum calculation
+  const unitCol = cols.find(c => c.id === 'unitPrice');
+  const sumCols = cols.filter(c => c.type === 'number' && c.calculation?.type === 'sum');
+  const primarySumCol = unitCol || sumCols[0]; // Use unitPrice if exists, otherwise first sum column
+
+  // Calculate base priceSum from primary sum column
+  let priceSum = 0;
+  if (primarySumCol) {
+    priceSum = q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + calcRowValShared(it, primarySumCol, cols), 0) || 0), 0);
+  }
+
+  // If no grandTotalFormula, return priceSum or fallback to stored total
+  const formulaSrc = (q as any).grandTotalFormula as string | undefined;
+  if (!formulaSrc || formulaSrc.trim() === '') {
+    return priceSum > 0 ? priceSum : ((q as any)?.total || 0);
+  }
+
+  // Process grandTotalFormula with variable substitution
+  try {
+    let formula = formulaSrc;
+
+    // Auto-add + between adjacent variables
+    formula = formula.replace(/(\})\s*(\{)/g, '}+{');
+
+    // Calculate column calculation results for ALL number columns with calculations
+    const calculationResults: { id: string; name: string; type: string; result: number }[] = [];
+    cols.forEach(col => {
+      if (col.type === 'number' && col.calculation) {
+        let result = 0;
+        const allValues = q.sections.flatMap(sec =>
+          (sec.items || []).map(it => calcRowValShared(it, col, cols))
+        );
+
+        if (col.calculation.type === 'sum') {
+          result = allValues.reduce((a, b) => a + b, 0);
+        } else if (col.calculation.type === 'average') {
+          result = allValues.length > 0 ? allValues.reduce((a, b) => a + b, 0) / allValues.length : 0;
+        } else if (col.calculation.type === 'custom' && col.calculation.formula) {
+          try {
+            let colFormula = col.calculation.formula;
+            const colSum = allValues.reduce((a, b) => a + b, 0);
+            colFormula = colFormula.replace(/@sum/gi, colSum.toString());
+            colFormula = colFormula.replace(/@count/gi, allValues.length.toString());
+            result = safeEval(colFormula);
+          } catch { result = 0; }
+        }
+        calculationResults.push({ id: col.id, name: col.name, type: col.calculation.type, result });
+      }
+    });
+
+    // Support system variables (use priceSum from primary column or 0 if no column)
+    formula = formula
+      .replace(/\{Price\}/g, priceSum.toString())
+      .replace(/\{P\}/g, priceSum.toString())
+      .replace(/\{\s*priceSum\s*\}/g, priceSum.toString());
+
+    // Support column calculation results using column names
+    calculationResults.forEach((calc, index) => {
+      const value = typeof calc.result === 'number' ? calc.result : 0;
+      const varName = calc.name.replace(/\s+/g, '');
+      formula = formula.replaceAll(`{${varName}}`, value.toString());
+      formula = formula.replaceAll(`{${varName}Calc}`, value.toString());
+      formula = formula.replaceAll(`{${String.fromCharCode(65 + index)}}`, value.toString());
+      formula = formula.replaceAll(`{${calc.id}}`, value.toString());
+    });
+
+    const result = safeEval(formula);
+    if (typeof result === 'number' && !isNaN(result)) return result;
+    return priceSum > 0 ? priceSum : ((q as any)?.total || 0);
+  } catch {
+    return priceSum > 0 ? priceSum : ((q as any)?.total || 0);
+  }
+}
+
 // --- STAGE 1: LOCAL CALCULATION HELPERS ---
 
 /**
@@ -95,7 +196,72 @@ export function calculateFinancialSummary(appData: AppData, dateRange: { from?: 
     const cols = (q.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
     const unitCol = cols.find(c => c.id === 'unitPrice');
     if (!unitCol) return 0;
-    return q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + calcRowVal(it, unitCol, cols), 0) || 0), 0);
+
+    // Calculate base priceSum (sum of unitPrice column)
+    const priceSum = q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + calcRowVal(it, unitCol, cols), 0) || 0), 0);
+
+    // If no grandTotalFormula, return priceSum
+    const formulaSrc = (q as any).grandTotalFormula as string | undefined;
+    if (!formulaSrc || formulaSrc.trim() === '') {
+      return priceSum;
+    }
+
+    // Process grandTotalFormula with variable substitution
+    try {
+      let formula = formulaSrc;
+
+      // Auto-add + between adjacent variables (e.g., {QuantitySum}{PriceAvg} becomes {QuantitySum}+{PriceAvg})
+      formula = formula.replace(/(\})\s*(\{)/g, '}+{');
+
+      // Calculate column calculation results (Sum, Average, Formula for each column)
+      const calculationResults: { id: string; name: string; type: string; result: number }[] = [];
+      cols.forEach(col => {
+        if (col.type === 'number' && col.calculation) {
+          let result = 0;
+          const allValues = q.sections.flatMap(sec =>
+            (sec.items || []).map(it => calcRowVal(it, col, cols))
+          );
+
+          if (col.calculation.type === 'sum') {
+            result = allValues.reduce((a, b) => a + b, 0);
+          } else if (col.calculation.type === 'average') {
+            result = allValues.length > 0 ? allValues.reduce((a, b) => a + b, 0) / allValues.length : 0;
+          } else if (col.calculation.type === 'custom' && col.calculation.formula) {
+            // Support column-level formulas
+            try {
+              let colFormula = col.calculation.formula;
+              const colSum = allValues.reduce((a, b) => a + b, 0);
+              colFormula = colFormula.replace(/@sum/gi, colSum.toString());
+              colFormula = colFormula.replace(/@count/gi, allValues.length.toString());
+              result = safeEval(colFormula);
+            } catch { result = 0; }
+          }
+          calculationResults.push({ id: col.id, name: col.name, type: col.calculation.type, result });
+        }
+      });
+
+      // Support system variables
+      formula = formula
+        .replace(/\{Price\}/g, priceSum.toString())
+        .replace(/\{P\}/g, priceSum.toString())
+        .replace(/\{\s*priceSum\s*\}/g, priceSum.toString());
+
+      // Support column calculation results using column names
+      calculationResults.forEach((calc, index) => {
+        const value = typeof calc.result === 'number' ? calc.result : 0;
+        const varName = calc.name.replace(/\s+/g, '');
+        formula = formula.replaceAll(`{${varName}}`, value.toString());
+        formula = formula.replaceAll(`{${varName}Calc}`, value.toString());
+        formula = formula.replaceAll(`{${String.fromCharCode(65 + index)}}`, value.toString());
+        formula = formula.replaceAll(`{${calc.id}}`, value.toString());
+      });
+
+      const result = safeEval(formula);
+      if (typeof result === 'number' && !isNaN(result)) return result;
+      return priceSum; // Fallback if formula fails
+    } catch {
+      return priceSum; // Fallback if formula processing fails
+    }
   };
 
   const computeCollabQuoteTotal = (cq?: CollaboratorQuote): number => {
@@ -323,30 +489,8 @@ export function calculateRevenueBreakdown(appData: AppData, dateRange: { from?: 
   const T = i18n[appData?.appSettings?.language || 'en'];
 
   // Group revenue by client for tasks in range (paid amounts only, any non-archived status)
-  const computeQuoteTotal = (q2?: Quote): number => {
-    if (!q2?.sections) return (q2 as any)?.total || 0;
-    const cols = (q2.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
-    const unitCol = cols.find(c => c.id === 'unitPrice');
-    if (!unitCol) return 0;
-    return q2.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => {
-      try {
-        if (unitCol.rowFormula) {
-          const rowVals: Record<string, number> = {};
-          cols.forEach(c => {
-            if (c.type === 'number' && c.id !== unitCol.id) {
-              const val = c.id === 'unitPrice' ? Number(it.unitPrice) || 0 : Number(it.customFields?.[c.id]) || 0;
-              rowVals[c.id] = val;
-            }
-          });
-          let expr = unitCol.rowFormula as string;
-          Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
-          const r = safeEval(expr);
-          return ia + (!isNaN(r) ? Number(r) : 0);
-        }
-        return ia + (Number(it.unitPrice) || 0);
-      } catch { return ia; }
-    }, 0) || 0), 0);
-  };
+  // Use shared helper with grandTotalFormula support
+  const computeQuoteTotal = (q2?: Quote): number => computeQuoteTotalWithFormula(q2);
   const totalsByClient = new Map<string, number>();
   for (const t of appData.tasks || []) {
     if (t.deletedAt || t.status === 'archived') continue;
@@ -459,30 +603,8 @@ export function calculateTaskDetails(appData: AppData, dateRange: { from?: Date;
     const q = t.quoteId ? quoteById.get(t.quoteId) : undefined;
     if (q) {
       // Compute quote total for percent payments and fallback paths (status=paid without explicit payments)
-      const computeQuoteTotal = (q2?: Quote): number => {
-        if (!q2?.sections) return (q2 as any)?.total || 0;
-        const cols = (q2.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
-        const unitCol = cols.find(c => c.id === 'unitPrice');
-        if (!unitCol) return 0;
-        return q2.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => {
-          try {
-            if (unitCol.rowFormula) {
-              const rowVals: Record<string, number> = {};
-              cols.forEach(c => {
-                if (c.type === 'number' && c.id !== unitCol.id) {
-                  const val = c.id === 'unitPrice' ? Number(it.unitPrice) || 0 : Number(it.customFields?.[c.id]) || 0;
-                  rowVals[c.id] = val;
-                }
-              });
-              let expr = unitCol.rowFormula as string;
-              Object.entries(rowVals).forEach(([cid, val]) => { expr = expr.replaceAll(cid, String(val)); });
-              const r = safeEval(expr);
-              return ia + (!isNaN(r) ? Number(r) : 0);
-            }
-            return ia + (Number(it.unitPrice) || 0);
-          } catch { return ia; }
-        }, 0) || 0), 0);
-      };
+      // Use shared helper with grandTotalFormula support
+      const computeQuoteTotal = (q2?: Quote): number => computeQuoteTotalWithFormula(q2);
 
       let amount = 0;
       const payments = (q as any).payments as any[] | undefined;
@@ -603,18 +725,8 @@ export function calculateAdditionalFinancials(appData: AppData, dateRange: { fro
   const getTaskDate = (t: Task) => t.endDate || t.deadline || t.startDate;
 
   const quoteById = new Map<string, Quote>((appData.quotes || []).map(q => [q.id, q]));
-  const computeQuoteTotal = (q?: Quote): number => {
-    if (!q?.sections) return 0;
-    const cols = (q.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
-    const unitCol = cols.find(c => c.id === 'unitPrice');
-    if (!unitCol) return 0;
-    return q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + (unitCol ? (unitCol.rowFormula ? (() => {
-      try {
-        let expr = unitCol.rowFormula as any; const rowVals: Record<string, number> = {}; cols.forEach(c => { if (c.type === 'number' && c.id !== unitCol.id) { const val = c.id === 'unitPrice' ? Number(it.unitPrice) || 0 : Number(it.customFields?.[c.id]) || 0; rowVals[c.id] = val; } }); Object.entries(rowVals).forEach(([cid, val]) => { expr = (expr as string).replaceAll(cid, String(val)); }); // eslint-disable-next-line no-eval
-        const r = safeEval(expr as string); return !isNaN(r) ? Number(r) : 0;
-      } catch { return 0; }
-    })() : Number(it.unitPrice) || 0) : 0), 0) || 0), 0);
-  };
+  // Use shared helper with grandTotalFormula support
+  const computeQuoteTotal = (q?: Quote): number => computeQuoteTotalWithFormula(q);
 
   const sumRemainingPayments = (q: Quote, totalHint?: number): number => {
     const payments = (q as any).payments as any[] | undefined;
@@ -648,21 +760,60 @@ export function calculateAdditionalFinancials(appData: AppData, dateRange: { fro
   const tasksInRange = (appData.tasks || []).filter(t => !t.deletedAt && t.status !== 'archived' && inRange(getTaskDate(t)));
 
   // Future revenue: tasks with any status except archived - calculate remaining unpaid amounts
+  // SPECIAL: for onhold tasks WITH payment data, include their unpaid portion in future revenue
   const futureRevenue = tasksInRange.reduce((sum, t) => {
-    if (t.status === 'archived' || t.status === 'onhold') return sum; // exclude on-hold from future revenue
+    if (t.status === 'archived') return sum;
     const q = t.quoteId ? quoteById.get(t.quoteId) : undefined;
     if (!q) return sum;
     const total = computeQuoteTotal(q);
+
+    // Check if task has any payment data
+    const hasPaymentData = (() => {
+      const payments = (q as any).payments as any[] | undefined;
+      if (Array.isArray(payments) && payments.length > 0) return true;
+      if (typeof (q as any).amountPaid === 'number' && (q as any).amountPaid > 0) return true;
+      if ((q as any).status === 'paid') return true;
+      return false;
+    })();
+
+    // For onhold tasks: only include if they have payment data (partial payment scenario)
+    if (t.status === 'onhold') {
+      if (hasPaymentData) {
+        // Include unpaid portion as future revenue
+        const remaining = sumRemainingPayments(q, total);
+        console.log(`🔮 Task "${t.name}" (onhold with payments) future revenue: ${remaining}`);
+        return sum + remaining;
+      }
+      // No payment data = skip (will go to lost revenue)
+      return sum;
+    }
+
     const remaining = sumRemainingPayments(q, total);
     console.log(`🔮 Task "${t.name}" (${t.status}) future revenue: ${remaining}`);
     return sum + remaining;
   }, 0);
 
-  // Lost revenue: tasks on-hold -> take full quote total
+  // Lost revenue: only onhold tasks WITHOUT any payment data
+  // If an onhold task has received ANY payment, it goes to Revenue (paid) + Future Revenue (unpaid)
   const lostRevenue = tasksInRange.reduce((sum, t) => {
     if (t.status !== 'onhold') return sum;
     const q = t.quoteId ? quoteById.get(t.quoteId) : undefined;
     if (!q) return sum;
+
+    // Check if task has any payment data
+    const hasPaymentData = (() => {
+      const payments = (q as any).payments as any[] | undefined;
+      if (Array.isArray(payments) && payments.length > 0) return true;
+      if (typeof (q as any).amountPaid === 'number' && (q as any).amountPaid > 0) return true;
+      if ((q as any).status === 'paid') return true;
+      return false;
+    })();
+
+    // Only count as lost revenue if NO payment data exists
+    if (hasPaymentData) {
+      return sum; // Skip - paid portion is in Revenue, unpaid is in Future Revenue
+    }
+
     const total = computeQuoteTotal(q);
     return sum + total;
   }, 0);
@@ -692,12 +843,8 @@ export function calculateAdditionalTaskDetails(appData: AppData, dateRange: { fr
   // Get translation helper
   const T = i18n[appData?.appSettings?.language || 'en'];
 
-  const computeQuoteTotal = (q: Quote): number => {
-    const cols = (q.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
-    const unitCol = cols.find(c => c.id === 'unitPrice');
-    if (!unitCol) return 0;
-    return q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + (unitCol ? (unitCol.rowFormula ? (() => { try { let expr = unitCol.rowFormula as any; const rowVals: Record<string, number> = {}; cols.forEach(c => { if (c.type === 'number' && c.id !== unitCol.id) { const val = c.id === 'unitPrice' ? Number(it.unitPrice) || 0 : Number(it.customFields?.[c.id]) || 0; rowVals[c.id] = val; } }); Object.entries(rowVals).forEach(([cid, val]) => { expr = (expr as string).replaceAll(cid, String(val)); }); const r = safeEval(expr as string); return !isNaN(r) ? Number(r) : 0; } catch { return 0; } })() : Number(it.unitPrice) || 0) : 0), 0) || 0), 0);
-  };
+  // Use shared helper with grandTotalFormula support
+  const computeQuoteTotal = (q: Quote): number => computeQuoteTotalWithFormula(q);
 
   const sumRemainingPayments = (q: Quote, totalHint?: number): number => {
     const payments = (q as any).payments as any[] | undefined;
@@ -727,13 +874,29 @@ export function calculateAdditionalTaskDetails(appData: AppData, dateRange: { fr
   const futureRevenueItems: any[] = [];
   const lostRevenueItems: any[] = [];
 
+  // Helper to check if quote has any payment data
+  const hasPaymentData = (q: Quote): boolean => {
+    const payments = (q as any).payments as any[] | undefined;
+    if (Array.isArray(payments) && payments.length > 0) return true;
+    if (typeof (q as any).amountPaid === 'number' && (q as any).amountPaid > 0) return true;
+    if ((q as any).status === 'paid') return true;
+    return false;
+  };
+
   // Future revenue items: all tasks except archived with remaining unpaid amounts
+  // SPECIAL: for onhold tasks WITH payment data, include their unpaid portion
   for (const t of tasksInRange) {
-    if (t.status === 'archived' || t.status === 'onhold') continue; // exclude on-hold from future revenue list
+    if (t.status === 'archived') continue;
     const q = t.quoteId ? quoteById.get(t.quoteId) : undefined;
     if (!q) continue;
 
     const total = computeQuoteTotal(q);
+
+    // For onhold tasks: only include if they have payment data
+    if (t.status === 'onhold') {
+      if (!hasPaymentData(q)) continue; // Skip - will go to lost revenue
+    }
+
     const remainingAmount = sumRemainingPayments(q, total);
 
     if (remainingAmount > 0) {
@@ -748,11 +911,14 @@ export function calculateAdditionalTaskDetails(appData: AppData, dateRange: { fr
     }
   }
 
-  // Lost revenue items: tasks on-hold
+  // Lost revenue items: only onhold tasks WITHOUT any payment data
   for (const t of tasksInRange) {
     if (t.status !== 'onhold') continue;
     const q = t.quoteId ? quoteById.get(t.quoteId) : undefined;
     if (!q) continue;
+
+    // Only count as lost revenue if NO payment data exists
+    if (hasPaymentData(q)) continue; // Skip - paid→Revenue, unpaid→Future Revenue
 
     const total = computeQuoteTotal(q);
     if (total > 0) {
@@ -760,7 +926,7 @@ export function calculateAdditionalTaskDetails(appData: AppData, dateRange: { fr
         id: t.id,
         name: t.name,
         clientName: clientById.get(t.clientId)?.name || T.unknownClient,
-        amount: total,
+        amount: total, // Full total since no payments made
         type: 'lost-revenue',
         status: t.status
       });
@@ -913,14 +1079,8 @@ export function calculateMonthlyFinancials(appData: AppData, dateRange: { from?:
       return Number(item.customFields?.[column.id]) || 0;
     } catch { return 0; }
   };
-  const computeQuoteTotal = (q?: Quote): number => {
-    if (!q?.sections) return (q as any)?.total || 0;
-    const cols = (q.columns || [{ id: 'description', name: 'Description', type: 'text' }, { id: 'unitPrice', name: 'Unit Price', type: 'number', calculation: { type: 'sum' } }] as QuoteColumn[]);
-    const unitCol = cols.find(c => c.id === 'unitPrice');
-    if (!unitCol) return (q as any)?.total || 0;
-    const computed = q.sections.reduce((acc, sec) => acc + (sec.items?.reduce((ia, it) => ia + calcRowVal(it, unitCol, cols), 0) || 0), 0);
-    return computed > 0 ? computed : ((q as any)?.total || 0);
-  };
+  // Use shared helper with grandTotalFormula support
+  const computeQuoteTotal = (q?: Quote): number => computeQuoteTotalWithFormula(q);
 
   // 1. Process Revenue (align with Financial Summary: include PAID payments from any non-archived task)
   tasksAll.forEach(t => {

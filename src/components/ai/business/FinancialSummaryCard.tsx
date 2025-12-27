@@ -88,6 +88,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<'revenue' | 'costs' | 'future-revenue' | 'lost-revenue' | 'fixed-costs' | null>(null);
+  const [dialogSearch, setDialogSearch] = useState('');
   const rangeCtx = null; // Remove analytics range context
   const [period, setPeriod] = useState<Period>('all');
   // Anchors for period selection
@@ -579,7 +580,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
         )}
 
         {/* Dialog for viewing details */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setDialogSearch(''); }}>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -595,6 +596,18 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                 {dialogType === 'fixed-costs' && 'Fixed Costs Management'}
               </DialogTitle>
             </DialogHeader>
+
+            {/* Search bar for dialog - only show for non-fixed-costs dialogs */}
+            {dialogType !== 'fixed-costs' && (
+              <div className="mb-4">
+                <Input
+                  placeholder={'Search by name or client...'}
+                  value={dialogSearch}
+                  onChange={(e) => setDialogSearch(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            )}
             <div className="space-y-4">
               {dialogType === 'fixed-costs' ? (
 
@@ -619,8 +632,16 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </CardContent>
                     </Card>
 
-                    {viewTaskDetails.revenueItems.length > 0 ? (
-                      viewTaskDetails.revenueItems.map((item) => (
+                    {viewTaskDetails.revenueItems.filter(item => {
+                      if (!dialogSearch) return true;
+                      const search = dialogSearch.toLowerCase();
+                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                    }).length > 0 ? (
+                      viewTaskDetails.revenueItems.filter(item => {
+                        if (!dialogSearch) return true;
+                        const search = dialogSearch.toLowerCase();
+                        return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                      }).map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
@@ -691,28 +712,36 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                     )}
 
                     {/* Collaborator Costs Section */}
-                    {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 border-b border-red-200 dark:border-red-700 pb-1">
-                          Collaborator Costs
-                        </h4>
-                        {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg border-2 border-red-200 dark:border-red-800 cursor-pointer hover:border-red-300 dark:hover:border-red-700 transition-colors"
-                            onClick={() => onTaskClick?.(item.id)}
-                          >
-                            <div className="flex-1">
-                              <h5 className="font-medium text-gray-800 dark:text-gray-200">{item.name}</h5>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">{item.clientName}</p>
+                    {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).filter(item => {
+                      if (!dialogSearch) return true;
+                      const search = dialogSearch.toLowerCase();
+                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                    }).length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 border-b border-red-200 dark:border-red-700 pb-1">
+                            Collaborator Costs
+                          </h4>
+                          {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).filter(item => {
+                            if (!dialogSearch) return true;
+                            const search = dialogSearch.toLowerCase();
+                            return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                          }).map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg border-2 border-red-200 dark:border-red-800 cursor-pointer hover:border-red-300 dark:hover:border-red-700 transition-colors"
+                              onClick={() => onTaskClick?.(item.id)}
+                            >
+                              <div className="flex-1">
+                                <h5 className="font-medium text-gray-800 dark:text-gray-200">{item.name}</h5>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">{item.clientName}</p>
+                              </div>
+                              <Badge variant="outline" className="border-red-200 text-gray-800 dark:border-red-700 dark:text-gray-200">
+                                {formatCurrency(item.amount)}
+                              </Badge>
                             </div>
-                            <Badge variant="outline" className="border-red-200 text-gray-800 dark:border-red-700 dark:text-gray-200">
-                              {formatCurrency(item.amount)}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      )}
 
                     {/* Empty state if no costs */}
                     {viewFixedCostDetails.length === 0 &&
@@ -730,8 +759,16 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </CardContent>
                     </Card>
 
-                    {viewAdditionalTaskDetails.futureRevenueItems.length > 0 ? (
-                      viewAdditionalTaskDetails.futureRevenueItems.map((item) => (
+                    {viewAdditionalTaskDetails.futureRevenueItems.filter(item => {
+                      if (!dialogSearch) return true;
+                      const search = dialogSearch.toLowerCase();
+                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                    }).length > 0 ? (
+                      viewAdditionalTaskDetails.futureRevenueItems.filter(item => {
+                        if (!dialogSearch) return true;
+                        const search = dialogSearch.toLowerCase();
+                        return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                      }).map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/30 transition-colors"
@@ -761,8 +798,16 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </CardContent>
                     </Card>
 
-                    {viewAdditionalTaskDetails.lostRevenueItems.length > 0 ? (
-                      viewAdditionalTaskDetails.lostRevenueItems.map((item) => (
+                    {viewAdditionalTaskDetails.lostRevenueItems.filter(item => {
+                      if (!dialogSearch) return true;
+                      const search = dialogSearch.toLowerCase();
+                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                    }).length > 0 ? (
+                      viewAdditionalTaskDetails.lostRevenueItems.filter(item => {
+                        if (!dialogSearch) return true;
+                        const search = dialogSearch.toLowerCase();
+                        return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
+                      }).map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/30 transition-colors"
