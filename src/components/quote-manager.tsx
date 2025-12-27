@@ -174,8 +174,9 @@ export const QuoteManager = ({
               const rowVals: Record<string, number> = {};
               columns.forEach(c => {
                 if (c.type === 'number' && c.id !== col.id) {
-                  const val = ['description', 'unitPrice'].includes(c.id)
-                    ? Number(item[c.id]) || 0
+                  // unitPrice is stored at item level, custom columns in customFields
+                  const val = c.id === 'unitPrice'
+                    ? Number(item.unitPrice) || 0
                     : Number(item.customFields?.[c.id]) || 0;
                   rowVals[c.id] = val;
                 }
@@ -287,8 +288,9 @@ export const QuoteManager = ({
             const rowVals: Record<string, number> = {};
             columns.forEach(c => {
               if (c.type === 'number' && c.id !== priceColumn.id) {
-                const val = ['description', 'unitPrice'].includes(c.id)
-                  ? Number(item[c.id]) || 0
+                // unitPrice is stored at item level, custom columns in customFields
+                const val = c.id === 'unitPrice'
+                  ? Number(item.unitPrice) || 0
                   : Number(item.customFields?.[c.id]) || 0;
                 rowVals[c.id] = val;
               }
@@ -337,9 +339,8 @@ export const QuoteManager = ({
                   const rowVals: Record<string, number> = {};
                   columns.forEach(c => {
                     if (c.type === 'number' && c.id !== 'unitPrice') {
-                      const val = ['description', 'unitPrice'].includes(c.id)
-                        ? Number(item[c.id]) || 0
-                        : Number(item.customFields?.[c.id]) || 0;
+                      // Custom columns only since we already check c.id !== 'unitPrice'
+                      const val = Number(item.customFields?.[c.id]) || 0;
                       rowVals[c.id] = val;
                     }
                   });

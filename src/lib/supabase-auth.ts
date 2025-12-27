@@ -84,6 +84,12 @@ export const auth = {
     });
     return { data, error };
   },
+
+  // Exchange code for session (PKCE flow for magic links / password reset)
+  async exchangeCodeForSession(code: string) {
+    const { data, error } = await getSupabase().auth.exchangeCodeForSession(code);
+    return { data, error };
+  },
 }
 
 // Helper to setup session cleanup for non-remember-me logins

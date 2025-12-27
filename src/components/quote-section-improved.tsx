@@ -1,10 +1,10 @@
- "use client";
+"use client";
 
 import * as React from "react";
 import { useFieldArray, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog";
-import { 
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -32,14 +32,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
-import { 
-  PlusCircle, 
-  Trash2, 
-  MoreVertical, 
-  ArrowLeft, 
-  ArrowRight, 
-  Pencil, 
-  ClipboardPaste, 
+import {
+  PlusCircle,
+  Trash2,
+  MoreVertical,
+  ArrowLeft,
+  ArrowRight,
+  Pencil,
+  ClipboardPaste,
   Settings,
   Calculator,
   Columns,
@@ -56,12 +56,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
 } from "./ui/dropdown-menu";
 import type { QuoteColumn } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -72,16 +72,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/t
 const createInitialTimelineData = (startDate?: Date, endDate?: Date, itemIndex = 0, totalItems = 1) => {
   const defaultStart = startDate || new Date();
   const defaultEnd = endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-  
+
   const totalDays = Math.ceil((defaultEnd.getTime() - defaultStart.getTime()) / (1000 * 60 * 60 * 24));
   const itemDuration = Math.max(1, Math.floor(totalDays / totalItems));
-  
+
   const startOffset = itemIndex * itemDuration;
   const endOffset = Math.min(startOffset + itemDuration, totalDays);
-  
+
   const itemStart = new Date(defaultStart.getTime() + startOffset * 24 * 60 * 60 * 1000);
   const itemEnd = new Date(defaultStart.getTime() + endOffset * 24 * 60 * 60 * 1000);
-  
+
   return JSON.stringify({
     start: itemStart.toISOString(),
     end: itemEnd.toISOString(),
@@ -137,7 +137,7 @@ const TimelineEditor = ({ field, taskStartDate, taskEndDate }: {
     // Clamp within task range if provided
     if (taskStartDate && newDate < taskStartDate) newDate = taskStartDate;
     if (taskEndDate && newDate > taskEndDate) newDate = taskEndDate;
-    
+
     const updates: any = {};
     if (isStart) {
       updates.start = newDate.toISOString();
@@ -146,7 +146,7 @@ const TimelineEditor = ({ field, taskStartDate, taskEndDate }: {
       updates.end = newDate.toISOString();
       // Don't auto-adjust start date - keep it independent
     }
-    
+
     const next = { ...timelineObj, ...updates };
     field.onChange(JSON.stringify(next));
   };
@@ -159,17 +159,17 @@ const TimelineEditor = ({ field, taskStartDate, taskEndDate }: {
       e.preventDefault();
       setIsDragging(true);
       dragStartRef.current = { x: e.clientX, initialDate: date.getTime() };
-      
+
       const handleMouseMove = (e: MouseEvent) => {
         const deltaX = e.clientX - dragStartRef.current.x;
         const daysDelta = Math.round(deltaX / 10); // 10px per day
-        
+
         if (Math.abs(daysDelta) >= 1) {
           const newTime = dragStartRef.current.initialDate + (daysDelta * 24 * 60 * 60 * 1000);
           const newDate = new Date(newTime);
-          
+
           updateDate(isStart, newDate);
-          
+
           // Update reference point for smooth dragging
           dragStartRef.current.x = e.clientX;
           dragStartRef.current.initialDate = newTime;
@@ -188,9 +188,8 @@ const TimelineEditor = ({ field, taskStartDate, taskEndDate }: {
 
     return (
       <span
-        className={`text-xs cursor-ew-resize select-none px-1 py-0.5 rounded transition-colors ${
-          isDragging ? 'bg-blue-100 cursor-grabbing' : 'hover:bg-gray-100'
-        }`}
+        className={`text-xs cursor-ew-resize select-none px-1 py-0.5 rounded transition-colors ${isDragging ? 'bg-blue-100 cursor-grabbing' : 'hover:bg-gray-100'
+          }`}
         onMouseDown={handleMouseDown}
         title={`Kéo trái/phải để thay đổi ${isStart ? 'ngày bắt đầu' : 'ngày kết thúc'}`}
       >
@@ -250,7 +249,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
   const [isEditingName, setIsEditingName] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
-  
+
   // Column management states
   const [isColumnDialogOpen, setIsColumnDialogOpen] = React.useState(false);
   const [editingColumn, setEditingColumn] = React.useState<QuoteColumn | null>(null);
@@ -261,24 +260,24 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
   const [enableRowFormula, setEnableRowFormula] = React.useState(false);
   const [rowFormula, setRowFormula] = React.useState('');
 
-  
+
   // Calculation dialog states
   const [isCalcDialogOpen, setIsCalcDialogOpen] = React.useState(false);
   const [configCalcCol, setConfigCalcCol] = React.useState<QuoteColumn | null>(null);
   const [selectedCalc, setSelectedCalc] = React.useState<string>('none');
   const [customFormula, setCustomFormula] = React.useState<string>('');
-  
+
   // Item management
   const [newItemDescription, setNewItemDescription] = React.useState('');
   const [selectedItems, setSelectedItems] = React.useState<number[]>([]);
-  
+
   // State for manual paste dialog - moved up to avoid initialization error
   const [isPasteDialogOpen, setIsPasteDialogOpen] = React.useState(false);
   const [pasteText, setPasteText] = React.useState('');
-  
+
   // State for delete section confirmation
   const [isDeleteSectionDialogOpen, setIsDeleteSectionDialogOpen] = React.useState(false);
-  
+
   const calculationTypes = [
     { value: 'none', label: (T as any).noCalculation },
     { value: 'sum', label: (T as any).sum },
@@ -302,7 +301,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
   // DnD state for row reordering
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = React.useState<number | null>(null);
-  
+
   const watchedItems = useWatch({
     control,
     name: `${fieldArrayName}.${sectionIndex}.items`,
@@ -327,10 +326,10 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
         if (col.id === 'description' || col.id === 'unitPrice') return item[col.id];
         return item.customFields?.[col.id];
       }).filter((v: unknown) => v !== undefined && v !== null && v !== '');
-      
+
       let result: number | string = '';
       let calcLabel = '';
-      
+
       if (col.calculation) {
         switch (col.calculation.type) {
           case 'sum':
@@ -374,7 +373,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
             break;
         }
       }
-      
+
       return {
         columnName: col.name,
         calcLabel,
@@ -397,13 +396,13 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
 
     try {
       let pasteText = '';
-      
+
       // Try modern Clipboard API with permission handling
       if (navigator.clipboard) {
         try {
           // Check permissions first
           const permission = await navigator.permissions.query({ name: 'clipboard-read' as PermissionName });
-          
+
           if (permission.state === 'granted') {
             pasteText = await navigator.clipboard.readText();
           } else if (permission.state === 'prompt') {
@@ -418,19 +417,19 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
           // Continue to fallback
         }
       }
-      
+
       // Validate the retrieved text
       if (pasteText && pasteText.trim()) {
         // Basic validation to ensure we have tabular data
         const lines = pasteText.trim().split(/\r?\n/);
         const hasTabularData = lines.some(line => line.includes('\t')) || lines.length > 1;
-        
+
         if (hasTabularData) {
           onPaste(sectionIndex, pasteText);
           return;
         } else {
-          toast({ 
-            variant: 'destructive', 
+          toast({
+            variant: 'destructive',
             title: (T as any).pasteFailed || 'Paste Failed',
             description: (T as any).clipboardInvalidFormat || 'Clipboard does not contain valid tabular data. Please copy data from a spreadsheet.'
           });
@@ -439,14 +438,14 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
           return;
         }
       }
-      
+
       // If we reach here, clipboard was empty or invalid
-      toast({ 
-        variant: 'destructive', 
+      toast({
+        variant: 'destructive',
         title: (T as any).clipboardEmpty || 'Clipboard Empty',
         description: (T as any).clipboardEmptyDesc || 'Clipboard is empty. Please copy some data first or use manual input.'
       });
-      
+
     } catch (error) {
       console.error('Clipboard access failed:', error);
       toast({
@@ -455,7 +454,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
         description: (T as any).clipboardAccessFailedDesc || 'Unable to access clipboard. Please use manual input.'
       });
     }
-    
+
     // Always fallback to manual paste dialog
     setIsPasteDialogOpen(true);
     setPasteText('');
@@ -476,8 +475,8 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
       setIsPasteDialogOpen(false);
       setPasteText('');
     } else {
-      toast({ 
-        variant: 'destructive', 
+      toast({
+        variant: 'destructive',
         title: (T as any).clipboardInvalidFormat || 'Please enter some data to paste'
       });
     }
@@ -498,19 +497,19 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
       const customFields: Record<string, any> = {};
       columns.forEach(col => {
         if (!['description', 'unitPrice'].includes(col.id)) {
-          customFields[col.id] = col.type === 'number' ? 0 : 
-                                 col.type === 'date' ? (col.dateFormat === 'range' ? { from: null, to: null } : null) : 
-                                 '';
+          customFields[col.id] = col.type === 'number' ? 0 :
+            col.type === 'date' ? (col.dateFormat === 'range' ? { from: null, to: null } : null) :
+              '';
         }
       });
-      
+
       // Always add timeline data for new items
       const currentItems = watchedItems || [];
       const newItemIndex = currentItems.length;
       const totalItems = newItemIndex + 1;
-      
+
       customFields.timeline = createInitialTimelineData(taskStartDate, taskEndDate, newItemIndex, totalItems);
-      
+
       append({
         description: newItemDescription.trim(),
         unitPrice: 0,
@@ -530,7 +529,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
       setSelectedCalc(column.calculation?.type || 'none');
       setCustomFormula(column.calculation?.formula || '');
       setEnableRowFormula(!!column.rowFormula);
-      
+
       // Convert column IDs back to @columnname format for editing
       let displayFormula = column.rowFormula || '';
       if (displayFormula) {
@@ -558,7 +557,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
 
   const handleSaveColumn = () => {
     let processedRowFormula = rowFormula;
-    
+
     // Convert @columnname to actual column IDs before saving
     if (enableRowFormula && rowFormula.trim()) {
       columns
@@ -568,12 +567,12 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
           processedRowFormula = processedRowFormula.replaceAll(`@${shortName}`, col.id);
         });
     }
-    
+
     // Only include rowFormula if enableRowFormula is true and formula is not empty
-    const rowFormulaProp = enableRowFormula && processedRowFormula.trim() 
-      ? { rowFormula: processedRowFormula.trim() } 
+    const rowFormulaProp = enableRowFormula && processedRowFormula.trim()
+      ? { rowFormula: processedRowFormula.trim() }
       : { rowFormula: undefined };
-    
+
     if (editingColumn) {
       if (editingColumn.id === 'unitPrice') {
         // Special handling for unitPrice column - only update rowFormula
@@ -615,7 +614,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
         onAddColumn(newColumn);
       }
     }
-    
+
     setIsColumnDialogOpen(false);
     setEditingColumn(null);
     setNewColumnName('');
@@ -636,12 +635,12 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
 
   const handleSaveCalculation = () => {
     if (!configCalcCol || !onUpdateColumnCalculation) return;
-    
-    const calculation = { 
-      type: selectedCalc as any, 
-      formula: selectedCalc === 'custom' ? customFormula : undefined 
+
+    const calculation = {
+      type: selectedCalc as any,
+      formula: selectedCalc === 'custom' ? customFormula : undefined
     };
-    
+
     onUpdateColumnCalculation(configCalcCol.id, calculation);
     setIsCalcDialogOpen(false);
     setConfigCalcCol(null);
@@ -653,8 +652,8 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
   };
 
   const toggleItemSelection = (index: number) => {
-    setSelectedItems(prev => 
-      prev.includes(index) 
+    setSelectedItems(prev =>
+      prev.includes(index)
         ? prev.filter(i => i !== index)
         : [...prev, index]
     );
@@ -672,7 +671,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
   const handleDragStart = (index: number, e: React.DragEvent) => {
     setDragIndex(index);
     // Required for Firefox to initiate drag
-    try { e.dataTransfer.setData('text/plain', String(index)); } catch {}
+    try { e.dataTransfer.setData('text/plain', String(index)); } catch { }
     e.dataTransfer.effectAllowed = 'move';
   };
   const handleDragEnter = (index: number) => {
@@ -723,7 +722,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
             {fields.length} {(T as any).items || "items"}
           </Badge>
         </div>
-        
+
         {canDeleteSection && (
           <TooltipProvider>
             <Tooltip>
@@ -757,7 +756,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                 <TableHead key={col.id} className={col.id === 'description' ? 'w-1/2' : undefined}>
                   <div className="flex items-center justify-between gap-2 min-w-[120px]">
                     <span>{col.name}</span>
-{(col.id.startsWith('custom_') || col.id === 'unitPrice') && (
+                    {(col.id.startsWith('custom_') || col.id === 'unitPrice') && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -773,14 +772,14 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                           {col.id.startsWith('custom_') && (
                             <>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 onClick={() => onMoveColumn(colIndex, 'left')}
                                 disabled={colIndex === 0}
                               >
                                 <ArrowLeft className="mr-2 h-4 w-4" />
                                 {(T as any).moveLeft}
                               </DropdownMenuItem>
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 onClick={() => onMoveColumn(colIndex, 'right')}
                                 disabled={colIndex === columns.length - 1}
                               >
@@ -802,11 +801,11 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
               ))}
               <TableHead className="w-[50px]">
                 {/* New Add Column Button: simple, opens dialog */}
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="icon" 
-                  className="h-6 w-6" 
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-6 w-6"
                   onClick={() => {
                     // Reset all states when adding new column
                     setEditingColumn(null);
@@ -828,7 +827,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
           </TableHeader>
           <TableBody>
             {fields.map((item, index) => (
-                <TableRow
+              <TableRow
                 key={item.id}
                 onDragEnter={() => handleDragEnter(index)}
                 onDragOver={handleDragOver}
@@ -854,35 +853,36 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                   <TableCell key={col.id}>
                     {col.type === 'number' && col.rowFormula
                       ? (() => {
-                          try {
-                            const currentItem = watchedItems?.[index];
-                            if (!currentItem) return <span className="text-xs text-gray-500">-</span>;
-                            const rowVals: Record<string, number> = {};
-                            columns.forEach(c => {
-                              if (c.type === 'number' && c.id !== col.id) {
-                                const value = ['description', 'unitPrice'].includes(c.id)
-                                  ? Number(currentItem[c.id]) || 0
-                                  : Number(currentItem.customFields?.[c.id]) || 0;
-                                rowVals[c.id] = value;
-                              }
-                            });
-                            let expr = col.rowFormula;
-                            Object.entries(rowVals).forEach(([cid, val]) => {
-                              expr = expr.replaceAll(cid, val.toString());
-                            });
-                            // eslint-disable-next-line no-eval
-                            const result = eval(expr);
-                            return (
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-sm text-blue-600">
-                                  {!isNaN(result) ? Number(result).toLocaleString() : (T as any).error}
-                                </span>
-                              </div>
-                            );
-                          } catch {
-                            return <span className="text-xs text-red-500">{(T as any).errorInFormula}</span>;
-                          }
-                        })()
+                        try {
+                          const currentItem = watchedItems?.[index];
+                          if (!currentItem) return <span className="text-xs text-gray-500">-</span>;
+                          const rowVals: Record<string, number> = {};
+                          columns.forEach(c => {
+                            if (c.type === 'number' && c.id !== col.id) {
+                              // unitPrice is stored at item level, custom columns in customFields
+                              const value = c.id === 'unitPrice'
+                                ? Number(currentItem.unitPrice) || 0
+                                : Number(currentItem.customFields?.[c.id]) || 0;
+                              rowVals[c.id] = value;
+                            }
+                          });
+                          let expr = col.rowFormula;
+                          Object.entries(rowVals).forEach(([cid, val]) => {
+                            expr = expr.replaceAll(cid, val.toString());
+                          });
+                          // eslint-disable-next-line no-eval
+                          const result = eval(expr);
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm text-blue-600">
+                                {!isNaN(result) ? Number(result).toLocaleString() : (T as any).error}
+                              </span>
+                            </div>
+                          );
+                        } catch {
+                          return <span className="text-xs text-red-500">{(T as any).errorInFormula}</span>;
+                        }
+                      })()
                       : (
                         <FormField
                           control={control}
@@ -892,14 +892,14 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                               <FormControl>
                                 {col.id === 'timeline' ? (
                                   // Draggable timeline editor with date picker
-                                  <TimelineEditor 
-                                    field={field} 
-                                    taskStartDate={taskStartDate} 
+                                  <TimelineEditor
+                                    field={field}
+                                    taskStartDate={taskStartDate}
                                     taskEndDate={taskEndDate}
                                   />
                                 ) : (
-                                  <Input 
-                                    type={col.type === 'date' ? 'text' : col.type} 
+                                  <Input
+                                    type={col.type === 'date' ? 'text' : col.type}
                                     {...field}
                                     value={field.value || (col.type === 'number' ? '0' : '')}
                                     className="border-gray-200 focus:border-gray-300 focus:ring-1 focus:ring-gray-300 shadow-none"
@@ -928,9 +928,9 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {editingColumn?.id === 'unitPrice' 
-                  ? (T as any).configurePriceFormula 
-                  : editingColumn 
+                {editingColumn?.id === 'unitPrice'
+                  ? (T as any).configurePriceFormula
+                  : editingColumn
                     ? `${(T as any).editColumn}: ${editingColumn.name}`
                     : (T as any).addColumn
                 }
@@ -963,7 +963,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                   </div>
                 </>
               )}
-                
+
               {/* Show formula configuration for number columns (including unitPrice) */}
               {(newColumnType === 'number' || editingColumn?.id === 'unitPrice') && (
                 <div className="space-y-3">
@@ -1003,7 +1003,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                   <div className="flex items-center gap-2 pt-2">
                     <Checkbox id="enable-row-formula" checked={enableRowFormula} onCheckedChange={v => setEnableRowFormula(!!v)} />
                     <Label htmlFor="enable-row-formula" className="text-sm">
-                      {editingColumn?.id === 'unitPrice' 
+                      {editingColumn?.id === 'unitPrice'
                         ? (T as any).unitPriceRowFormulaDesc
                         : (T as any).rowFormulaDesc
                       }
@@ -1012,12 +1012,12 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                   {enableRowFormula && (
                     <div className="space-y-4">
                       <Label htmlFor="row-formula">
-                        {editingColumn?.id === 'unitPrice' 
+                        {editingColumn?.id === 'unitPrice'
                           ? (T as any).priceFormulaLabel
                           : (T as any).cellFormulaLabel
                         }
                       </Label>
-                      
+
                       {/* Simplified Formula Builder */}
                       <div className="border rounded-lg p-4 space-y-4 bg-gray-50">
                         {/* Formula Input */}
@@ -1084,9 +1084,9 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                             }
                           </div>
                         </div>
-                        
+
                         {/* Live Preview removed as requested */}
-                        
+
                         {/* Help text */}
                         <div className="text-xs text-gray-600 space-y-1">
                           <p><strong>{(T as any).howToUse}</strong></p>
@@ -1097,9 +1097,9 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                           </ul>
                         </div>
                       </div>
-                      
+
                       <p className="text-xs text-muted-foreground">
-                        {editingColumn?.id === 'unitPrice' 
+                        {editingColumn?.id === 'unitPrice'
                           ? (T as any).unitPriceFormulaNote
                           : (T as any).rowFormulaNote
                         }
@@ -1108,7 +1108,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                   )}
                 </div>
               )}
-                
+
               {/* Date format options for date columns */}
               {newColumnType === 'date' && editingColumn?.id !== 'unitPrice' && (
                 <div className="space-y-2 mt-4">
@@ -1137,7 +1137,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
                 setIsColumnDialogOpen(false);
               }}>{(T as any).cancel}</Button>
               <Button type="button" onClick={handleSaveColumn}>
-                {editingColumn?.id === 'unitPrice' 
+                {editingColumn?.id === 'unitPrice'
                   ? (T as any).savePriceConfig
                   : (editingColumn ? (T as any).saveChanges : (T as any).addColumn)
                 }
@@ -1149,46 +1149,46 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
 
         <div className="flex items-center gap-2 mt-4 pt-4 border-t">
           <Input
-              placeholder={(T as any).newItemPlaceholder}
-              value={newItemDescription}
-              onChange={(e) => setNewItemDescription(e.target.value)}
-              onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleAddItem();
-                  }
-              }}
-              className="h-9 flex-grow"
+            placeholder={(T as any).newItemPlaceholder}
+            value={newItemDescription}
+            onChange={(e) => setNewItemDescription(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleAddItem();
+              }
+            }}
+            className="h-9 flex-grow"
           />
           <TooltipProvider>
-              <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9"
-                          onClick={handleAddItem}
-                          disabled={!newItemDescription.trim()}
-                      >
-                          <PlusCircle className="h-4 w-4" />
-                          <span className="sr-only">{(T as any).addItem}</span>
-                      </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>{(T as any).addItem}</p></TooltipContent>
-              </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={handleAddItem}
+                  disabled={!newItemDescription.trim()}
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  <span className="sr-only">{(T as any).addItem}</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>{(T as any).addItem}</p></TooltipContent>
+            </Tooltip>
           </TooltipProvider>
           {onPaste && (
             <TooltipProvider>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={handlePaste}>
-                            <ClipboardPaste className="h-4 w-4" />
-                            <span className="sr-only">{(T as any).pasteTable}</span>
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent><p>{(T as any).pasteTable}</p></TooltipContent>
-                </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={handlePaste}>
+                    <ClipboardPaste className="h-4 w-4" />
+                    <span className="sr-only">{(T as any).pasteTable}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>{(T as any).pasteTable}</p></TooltipContent>
+              </Tooltip>
             </TooltipProvider>
           )}
         </div>
@@ -1245,7 +1245,7 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{(T as any).cancel || "Cancel"}</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDeleteSection}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -1259,6 +1259,6 @@ export const QuoteSectionComponent = (props: QuoteSectionComponentProps) => {
 }
 
 QuoteSectionComponent.defaultProps = {
-  onUpdateColumnCalculation: () => {},
+  onUpdateColumnCalculation: () => { },
 };
 
