@@ -113,9 +113,23 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
 
         switch (cost.frequency) {
           case 'once':
-            // One-time cost applies if start date is in range
-            if (costStart >= fromDate && costStart <= toDate) {
-              costForRange = cost.amount;
+            // NEW LOGIC: If endDate is defined, prorate over the period
+            if (cost.endDate) {
+              const costEndDate = new Date(cost.endDate);
+              const costTotalDays = Math.ceil((costEndDate.getTime() - costStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+              const dailyRate = cost.amount / costTotalDays;
+
+              // Calculate overlap between cost period and selected range
+              const overlapStart = new Date(Math.max(costStart.getTime(), fromDate.getTime()));
+              const overlapEnd = new Date(Math.min(costEndDate.getTime(), toDate.getTime()));
+              const overlapDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+              costForRange = dailyRate * overlapDays;
+            } else {
+              // No endDate: only count if startDate is in range
+              if (costStart >= fromDate && costStart <= toDate) {
+                costForRange = cost.amount;
+              }
             }
             break;
           case 'weekly':
@@ -300,7 +314,14 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                       let dailyRate = 0;
                       switch (cost.frequency) {
                         case 'once':
-                          dailyRate = 0; // One-time costs don't contribute to daily recurring
+                          // If one-time cost has endDate, calculate daily rate over the period
+                          if (cost.endDate && cost.startDate) {
+                            const start = new Date(cost.startDate);
+                            const end = new Date(cost.endDate);
+                            const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                            dailyRate = days > 0 ? cost.amount / days : 0;
+                          }
+                          // If no endDate, one-time costs don't contribute to daily recurring
                           break;
                         case 'weekly':
                           dailyRate = cost.amount / 7;
@@ -326,7 +347,15 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                       let monthlyRate = 0;
                       switch (cost.frequency) {
                         case 'once':
-                          monthlyRate = 0; // One-time costs don't contribute to monthly recurring
+                          // If one-time cost has endDate, calculate monthly rate over the period
+                          if (cost.endDate && cost.startDate) {
+                            const start = new Date(cost.startDate);
+                            const end = new Date(cost.endDate);
+                            const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                            const dailyRate = days > 0 ? cost.amount / days : 0;
+                            monthlyRate = dailyRate * 30.44;
+                          }
+                          // If no endDate, one-time costs don't contribute to monthly recurring
                           break;
                         case 'weekly':
                           monthlyRate = cost.amount * 4.33;
@@ -352,7 +381,15 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                       let yearlyRate = 0;
                       switch (cost.frequency) {
                         case 'once':
-                          yearlyRate = 0; // One-time costs don't contribute to yearly recurring
+                          // If one-time cost has endDate, calculate yearly rate over the period
+                          if (cost.endDate && cost.startDate) {
+                            const start = new Date(cost.startDate);
+                            const end = new Date(cost.endDate);
+                            const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                            const dailyRate = days > 0 ? cost.amount / days : 0;
+                            yearlyRate = dailyRate * 365.25;
+                          }
+                          // If no endDate, one-time costs don't contribute to yearly recurring
                           break;
                         case 'weekly':
                           yearlyRate = cost.amount * 52.14;

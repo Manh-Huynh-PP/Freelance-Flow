@@ -167,8 +167,22 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
         case 'monthly': dailyRate = cost.amount / 30.44; break;
         case 'yearly': dailyRate = cost.amount / 365.25; break;
         case 'once':
-          if (fromDate && toDate && startDate >= fromDate && startDate <= toDate) return total + cost.amount;
-          return total;
+          // NEW LOGIC: If endDate is defined, prorate over the period
+          if (endDate) {
+            const costTotalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            const onceDaily = cost.amount / costTotalDays;
+
+            // Calculate overlap between cost period and selected range
+            const overlapStart = new Date(Math.max(startDate.getTime(), fromDate!.getTime()));
+            const overlapEnd = new Date(Math.min(endDate.getTime(), toDate!.getTime()));
+            const overlapDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+            return total + (onceDaily * overlapDays);
+          } else {
+            // No endDate: only count if startDate is in range
+            if (fromDate && toDate && startDate >= fromDate && startDate <= toDate) return total + cost.amount;
+            return total;
+          }
       }
       const costForRange = rangeDays ? dailyRate * rangeDays : 0;
       return total + costForRange;
