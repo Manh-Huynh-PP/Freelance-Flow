@@ -52,6 +52,7 @@ export function DocsSidebar() {
             items: [
                 { title: t?.financials || "Financial Calculations", href: "/docs/business/financials" },
                 { title: t?.timeTracking || "Productivity Analysis", href: "/docs/business/time-tracking" },
+                { title: t?.fixedCosts || "Fixed Cost Guide", href: "/docs/business/fixed-costs" },
             ],
         },
     ];

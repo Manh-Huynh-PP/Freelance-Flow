@@ -162,6 +162,17 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
       if ((fromDate && startDate > toDate!) || (endDate && fromDate && endDate < fromDate)) return total;
 
       let dailyRate = 0;
+      let overlapDays = 0;
+
+      // Calculate overlap for recurring costs
+      // For costs without endDate: use the end of selected range (allows annual costs to continue)
+      const effEndDate = endDate || toDate || now;
+      const overlapStart = new Date(Math.max(startDate.getTime(), fromDate!.getTime()));
+      const overlapEnd = new Date(Math.min(effEndDate.getTime(), toDate!.getTime()));
+      if (overlapEnd >= overlapStart) {
+        overlapDays = Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      }
+
       switch (cost.frequency) {
         case 'weekly': dailyRate = cost.amount / 7; break;
         case 'monthly': dailyRate = cost.amount / 30.44; break;
@@ -171,12 +182,6 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
           if (endDate) {
             const costTotalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
             const onceDaily = cost.amount / costTotalDays;
-
-            // Calculate overlap between cost period and selected range
-            const overlapStart = new Date(Math.max(startDate.getTime(), fromDate!.getTime()));
-            const overlapEnd = new Date(Math.min(endDate.getTime(), toDate!.getTime()));
-            const overlapDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-
             return total + (onceDaily * overlapDays);
           } else {
             // No endDate: only count if startDate is in range
@@ -184,7 +189,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
             return total;
           }
       }
-      const costForRange = rangeDays ? dailyRate * rangeDays : 0;
+      const costForRange = dailyRate * overlapDays;
       return total + costForRange;
     }, 0);
   }, [appData?.fixedCosts, period, weekDate, monthValue, yearValue]);

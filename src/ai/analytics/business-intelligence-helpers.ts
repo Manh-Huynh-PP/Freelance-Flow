@@ -309,7 +309,10 @@ export function calculateFinancialSummary(appData: AppData, dateRange: { from?: 
       }
 
       const costStart = new Date(cost.startDate);
-      const costEnd = cost.endDate ? new Date(cost.endDate) : nowLocal;
+      // For costs without endDate: use the end of selected range (or now if no range)
+      // This allows annual costs to continue into future periods as long as isActive
+      const rangeEnd = hasRange ? new Date(dateRange.to!) : nowLocal;
+      const costEnd = cost.endDate ? new Date(cost.endDate) : rangeEnd;
 
       // Validate dates
       if (isNaN(costStart.getTime())) {
@@ -330,13 +333,30 @@ export function calculateFinancialSummary(appData: AppData, dateRange: { from?: 
         if (hasRange) {
           const fromDate = new Date(dateRange.from!);
           const toDate = new Date(dateRange.to!);
-          const costAmount = (costStart >= fromDate && costStart <= toDate) ? cost.amount : 0;
-          if (costAmount > 0) {
-            console.log(`💰 Fixed cost (once) "${cost.name}": ${costAmount}`);
+
+          // DAILY PRORATION: If endDate is defined, divide amount by period days
+          if (cost.endDate) {
+            const costEndDate = new Date(cost.endDate);
+            const costTotalDays = Math.ceil((costEndDate.getTime() - costStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            const dailyRate = cost.amount / costTotalDays;
+
+            // Calculate overlap between cost period and selected range
+            const days = overlapDays(fromDate, toDate, costStart, costEndDate);
+            if (days <= 0) return total;
+
+            const costAmount = dailyRate * days;
+            console.log(`💰 Fixed cost (once, daily prorate) "${cost.name}": ${costAmount} (${days}/${costTotalDays} days)`);
+            return total + costAmount;
+          } else {
+            // No endDate: full amount if startDate is in range
+            const costAmount = (costStart >= fromDate && costStart <= toDate) ? cost.amount : 0;
+            if (costAmount > 0) {
+              console.log(`💰 Fixed cost (once) "${cost.name}": ${costAmount}`);
+            }
+            return total + costAmount;
           }
-          return total + costAmount;
         }
-        // all-time: include if within active window (which it always is by definition of start)
+        // all-time: include full amount
         console.log(`💰 Fixed cost (once, all-time) "${cost.name}": ${cost.amount}`);
         return total + cost.amount;
       }
@@ -687,11 +707,23 @@ export function calculateAdditionalFinancials(appData: AppData, dateRange: { fro
     return remaining;
   };
 
+  // For Future Revenue: include tasks where taskDate <= rangeEnd
+  // This ensures unpaid tasks are tracked as long as viewing a range that includes their date
+  const taskDateInOrBeforeRange = (d?: string | Date) => {
+    const dt = toDate(d);
+    if (!dt) return false;
+    const to = dateRange.to ? new Date(dateRange.to) : undefined;
+    // Task is included if its date is <= the end of selected range (or always if no range)
+    if (to && dt > to) return false;
+    return true;
+  };
+
+  const tasksForFutureRevenue = (appData.tasks || []).filter(t => !t.deletedAt && t.status !== 'archived' && taskDateInOrBeforeRange(getTaskDate(t)));
   const tasksInRange = (appData.tasks || []).filter(t => !t.deletedAt && t.status !== 'archived' && inRange(getTaskDate(t)));
 
   // Future revenue: tasks with any status except archived - calculate remaining unpaid amounts
-  // SPECIAL: for onhold tasks WITH payment data, include their unpaid portion in future revenue
-  const futureRevenue = tasksInRange.reduce((sum, t) => {
+  // UPDATED: Uses tasksForFutureRevenue (taskDate <= rangeEnd) so unpaid tasks are always tracked
+  const futureRevenue = tasksForFutureRevenue.reduce((sum, t) => {
     if (t.status === 'archived') return sum;
     const q = t.quoteId ? quoteById.get(t.quoteId) : undefined;
     if (!q) return sum;
@@ -799,6 +831,17 @@ export function calculateAdditionalTaskDetails(appData: AppData, dateRange: { fr
     return Math.max(0, total - totalPaid);
   };
 
+  // For Future Revenue: include tasks where taskDate <= rangeEnd
+  // This ensures unpaid tasks are tracked as long as viewing a range that includes their date
+  const taskDateInOrBeforeRange = (d?: string | Date) => {
+    const dt = toDate(d);
+    if (!dt) return false;
+    const to = dateRange.to ? new Date(dateRange.to) : undefined;
+    if (to && dt > to) return false;
+    return true;
+  };
+
+  const tasksForFutureRevenue = (appData.tasks || []).filter(t => !t.deletedAt && t.status !== 'archived' && taskDateInOrBeforeRange(getTaskDate(t)));
   const tasksInRange = (appData.tasks || []).filter(t => !t.deletedAt && t.status !== 'archived' && inRange(getTaskDate(t)));
 
   const futureRevenueItems: any[] = [];
@@ -813,9 +856,9 @@ export function calculateAdditionalTaskDetails(appData: AppData, dateRange: { fr
     return false;
   };
 
-  // Future revenue items: all tasks except archived with remaining unpaid amounts
-  // SPECIAL: for onhold tasks WITH payment data, include their unpaid portion
-  for (const t of tasksInRange) {
+  // Future revenue items: all tasks (taskDate <= rangeEnd) except archived with remaining unpaid amounts
+  // UPDATED: Uses tasksForFutureRevenue so unpaid tasks are always tracked
+  for (const t of tasksForFutureRevenue) {
     if (t.status === 'archived') continue;
     const q = t.quoteId ? quoteById.get(t.quoteId) : undefined;
     if (!q) continue;
@@ -916,28 +959,49 @@ export function calculateFixedCostDetails(appData: AppData, dateRange: { from?: 
       return;
     }
 
+    // Helper: compute overlap-inclusive days
+    const overlapDays = (fromA: Date, toA: Date, fromB: Date, toB: Date) => {
+      const start = new Date(Math.max(fromA.getTime(), fromB.getTime()));
+      const end = new Date(Math.min(toA.getTime(), toB.getTime()));
+      if (end < start) return 0;
+      return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    };
+
+    // Determine effective end date - use rangeToDate for costs without endDate
+    // This allows annual costs to continue into future periods as long as isActive
+    const effectiveEndDate = endDate || rangeToDate;
+    const overlap = overlapDays(rangeFromDate, rangeToDate, startDate, effectiveEndDate);
+    if (overlap <= 0) return;
+
     // Calculate daily rate and total for this range
     let dailyRate = 0;
     let costForRange = 0;
 
     switch (cost.frequency) {
       case 'once':
-        // One-time cost applies if start date is in range
-        if (startDate >= rangeFromDate && startDate <= rangeToDate) {
-          costForRange = cost.amount;
+        // DAILY PRORATION: If endDate is defined, divide amount by period days
+        if (endDate) {
+          const costTotalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          dailyRate = cost.amount / costTotalDays;
+          costForRange = dailyRate * overlap;
+        } else {
+          // No endDate: full amount if startDate is in range
+          if (startDate >= rangeFromDate && startDate <= rangeToDate) {
+            costForRange = cost.amount;
+          }
         }
         break;
       case 'weekly':
         dailyRate = cost.amount / 7;
-        costForRange = dailyRate * rangeDays;
+        costForRange = dailyRate * overlap;
         break;
       case 'monthly':
         dailyRate = cost.amount / 30.44;
-        costForRange = dailyRate * rangeDays;
+        costForRange = dailyRate * overlap;
         break;
       case 'yearly':
         dailyRate = cost.amount / 365.25;
-        costForRange = dailyRate * rangeDays;
+        costForRange = dailyRate * overlap;
         break;
     }
 

@@ -91,7 +91,10 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
       }
 
       const costStart = new Date(cost.startDate);
-      const costEnd = cost.endDate ? new Date(cost.endDate) : now;
+      // For costs without endDate: use the end of selected range (or now if no range)
+      // This allows annual costs to continue into future periods as long as isActive
+      const rangeEnd = hasRange ? new Date(dateRange.to!) : now;
+      const costEnd = cost.endDate ? new Date(cost.endDate) : rangeEnd;
 
       // Validate dates - skip if invalid
       if (isNaN(costStart.getTime())) {
@@ -132,15 +135,28 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
               }
             }
             break;
-          case 'weekly':
-            costForRange = (cost.amount / 7) * rangeDays;
+          case 'weekly': {
+            // Calculate overlap days between cost active period and selected range
+            const overlapStart = new Date(Math.max(costStart.getTime(), fromDate.getTime()));
+            const overlapEnd = new Date(Math.min(costEnd.getTime(), toDate.getTime()));
+            const overlapDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+            costForRange = (cost.amount / 7) * overlapDays;
             break;
-          case 'monthly':
-            costForRange = (cost.amount / 30.44) * rangeDays;
+          }
+          case 'monthly': {
+            const overlapStart = new Date(Math.max(costStart.getTime(), fromDate.getTime()));
+            const overlapEnd = new Date(Math.min(costEnd.getTime(), toDate.getTime()));
+            const overlapDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+            costForRange = (cost.amount / 30.44) * overlapDays;
             break;
-          case 'yearly':
-            costForRange = (cost.amount / 365.25) * rangeDays;
+          }
+          case 'yearly': {
+            const overlapStart = new Date(Math.max(costStart.getTime(), fromDate.getTime()));
+            const overlapEnd = new Date(Math.min(costEnd.getTime(), toDate.getTime()));
+            const overlapDays = Math.max(0, Math.ceil((overlapEnd.getTime() - overlapStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+            costForRange = (cost.amount / 365.25) * overlapDays;
             break;
+          }
         }
 
         return total + costForRange;
@@ -301,13 +317,13 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
-              Fixed Costs Summary
+              {T.fixedCostsSummary || 'Fixed Costs Summary'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">Total Per Day</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mb-1">{T.avgPerDay || 'Average / Day'}</p>
                 <p className="text-lg font-bold text-blue-800 dark:text-blue-200">
                   {(() => {
                     const totalDaily = fixedCosts.filter((cost) => cost.isActive).reduce((total: number, cost: FixedCost) => {
@@ -340,7 +356,7 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                 </p>
               </div>
               <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                <p className="text-xs text-green-600 dark:text-green-400 mb-1">Total Per Month</p>
+                <p className="text-xs text-green-600 dark:text-green-400 mb-1">{T.avgPerMonth || 'Average / Month'}</p>
                 <p className="text-lg font-bold text-green-800 dark:text-green-200">
                   {(() => {
                     const totalMonthly = fixedCosts.filter((cost) => cost.isActive).reduce((total: number, cost: FixedCost) => {
@@ -374,7 +390,7 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                 </p>
               </div>
               <div className="text-center p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                <p className="text-xs text-purple-600 dark:text-purple-400 mb-1">Total Per Year</p>
+                <p className="text-xs text-purple-600 dark:text-purple-400 mb-1">{T.avgPerYear || 'Average / Year'}</p>
                 <p className="text-lg font-bold text-purple-800 dark:text-purple-200">
                   {(() => {
                     const totalYearly = fixedCosts.filter((cost) => cost.isActive).reduce((total: number, cost: FixedCost) => {
@@ -416,19 +432,19 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
       {fixedCosts.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Current Fixed Costs</CardTitle>
+            <CardTitle className="text-lg">{T.currentFixedCosts || 'Current Fixed Costs'}</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Frequency</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>End Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{T.fixedCostName || 'Name'}</TableHead>
+                  <TableHead>{T.fixedCostAmount || 'Amount'}</TableHead>
+                  <TableHead>{T.fixedCostFrequency || 'Frequency'}</TableHead>
+                  <TableHead>{T.fixedCostStartDate || 'Start Date'}</TableHead>
+                  <TableHead>{T.fixedCostEndDate || 'End Date'}</TableHead>
+                  <TableHead>{T.status || 'Status'}</TableHead>
+                  <TableHead className="text-right">{T.actions || 'Actions'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -463,7 +479,7 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                     </TableCell>
                     <TableCell>
                       <Badge variant={cost.isActive ? 'default' : 'secondary'}>
-                        {cost.isActive ? 'Active' : 'Inactive'}
+                        {cost.isActive ? (T.fixedCostStatusActive || 'Active') : (T.fixedCostStatusInactive || 'Inactive')}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -496,10 +512,10 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
       {fixedCosts.length === 0 && (
         <div className="text-center py-8 text-muted-foreground">
           <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
-          <p>No fixed costs added yet</p>
+          <p>{T.noFixedCostsYet || 'No fixed costs added yet'}</p>
           <Button onClick={handleAddCost} className="mt-4">
             <Plus className="w-4 h-4 mr-2" />
-            Add your first fixed cost
+            {T.addFirstFixedCost || 'Add your first fixed cost'}
           </Button>
         </div>
       )}
@@ -513,14 +529,14 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
           <CardHeader className="pb-3">
             <CardTitle className="text-xl font-bold flex items-center gap-2">
               <Settings className="w-6 h-6 text-primary" />
-              Fixed Costs
+              {T.fixedCosts || 'Fixed Costs'}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle className="w-4 h-4 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="text-xs">
-                    Chi phí cố định được tính theo thời gian đã chọn
+                    {T.fixedCostsTooltipTime || 'Fixed costs calculated for the selected period'}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -534,7 +550,7 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                    Total Fixed Costs
+                    {T.totalFixedCosts || 'Total Fixed Costs'}
                   </p>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -542,7 +558,7 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-xs">
-                        Tính toán cho khoảng thời gian đã chọn
+                        {T.calculatedForSelectedPeriod || 'Calculated for the selected period'}
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -556,7 +572,7 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                 {formatCurrency(totalFixedCosts)}
               </h3>
               <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
-                {fixedCosts.length} {fixedCosts.length === 1 ? 'item' : 'items'}
+                {fixedCosts.length} {fixedCosts.length === 1 ? (T.fixedCostItem || 'item') : (T.fixedCostItems || 'items')}
               </p>
             </div>
           </CardContent>
@@ -599,7 +615,7 @@ export function FixedCostsCard({ dateRange, currency = 'USD', locale, embedded =
                   id="form-name"
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Enter cost name"
+                  placeholder={T.enterCostNamePlaceholder || 'Enter cost name'}
                   required
                 />
               </div>

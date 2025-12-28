@@ -23,7 +23,8 @@ export const docsTranslations = {
 
             business: "Business Logic",
             financials: "Financial Calculations",
-            timeTracking: "Productivity Analysis"
+            timeTracking: "Productivity Analysis",
+            fixedCosts: "Fixed Cost Guide"
         },
 
         // Introduction page
@@ -957,6 +958,54 @@ export const docsTranslations = {
                         desc: "Insights are categorized as Critical, High, Medium, or Low based on business impact."
                     }
                 ]
+            },
+
+            fixedCosts: {
+                title: "Understanding Fixed Costs",
+                subtitle: "A simple guide to managing recurring expenses",
+                description: "Fixed costs are regular expenses that help you track your business overhead. This guide explains how the system calculates and displays these costs.",
+
+                introTitle: "What Are Fixed Costs?",
+                introDesc: "Fixed costs are expenses that occur regularly, like studio rent, software subscriptions, or equipment purchases.",
+                introExamples: [
+                    { name: "Monthly", example: "Adobe Creative Cloud - $50/month" },
+                    { name: "Yearly", example: "Domain renewal - $15/year" },
+                    { name: "One-time", example: "New laptop - $1,500 (spread over 3 years)" }
+                ],
+
+                frequencyTitle: "Frequency Types",
+                frequencyDesc: "Choose how often each cost recurs:",
+                frequencies: [
+                    { name: "One-time", desc: "A single payment, optionally spread over time", example: "Equipment purchase" },
+                    { name: "Weekly", desc: "Repeats every week", example: "Freelancer assistant" },
+                    { name: "Monthly", desc: "Repeats every month", example: "Office rent, subscriptions" },
+                    { name: "Yearly", desc: "Repeats every year", example: "Annual licenses" }
+                ],
+
+                calculationTitle: "How Costs Are Calculated",
+                calculationDesc: "The system divides costs into daily amounts, then multiplies by the days in your selected period.",
+                calculationExample: {
+                    title: "Example",
+                    desc: "You pay $300/month for rent. For a 15-day report: $300 ÷ 30 days × 15 days = $150"
+                },
+
+                onetimeTitle: "Spreading One-time Costs",
+                onetimeDesc: "For big purchases, set an End Date to spread the cost over time:",
+                onetimeExample: {
+                    title: "Example",
+                    desc: "Laptop costs $1,500, used for 3 years. Monthly cost: $1,500 ÷ 36 months ≈ $42/month"
+                },
+
+                continuousTitle: "Ongoing Costs",
+                continuousDesc: "Leave End Date empty for costs that continue indefinitely. Mark as 'Inactive' when you stop paying.",
+
+                tipsTitle: "Tips",
+                tips: [
+                    "Always set the correct start date",
+                    "For equipment, set an end date matching its lifespan",
+                    "Mark costs as 'Inactive' instead of deleting them",
+                    "Check the Fixed Costs Summary to review averages"
+                ]
             }
         }
     },
@@ -985,7 +1034,8 @@ export const docsTranslations = {
 
             business: "Nghiệp Vụ",
             financials: "Tính Toán Tài Chính",
-            timeTracking: "Phân Tích Năng Suất"
+            timeTracking: "Phân Tích Năng Suất",
+            fixedCosts: "Chi Phí Cố Định"
         },
 
         // Trang giới thiệu
@@ -1712,6 +1762,54 @@ export const docsTranslations = {
                         name: "Mức Độ Nghiêm Trọng",
                         desc: "Các nhận định được phân loại là Nguy cấp, Cao, Trung bình hoặc Thấp dựa trên tác động kinh doanh."
                     }
+                ]
+            },
+
+            fixedCosts: {
+                title: "Hiểu Về Chi Phí Cố Định",
+                subtitle: "Hướng dẫn đơn giản về quản lý chi phí định kỳ",
+                description: "Chi phí cố định là các khoản chi định kỳ giúp bạn theo dõi chi phí vận hành. Hướng dẫn này giải thích cách hệ thống tính toán và hiển thị các khoản chi này.",
+
+                introTitle: "Chi Phí Cố Định Là Gì?",
+                introDesc: "Là các khoản chi xảy ra đều đặn như tiền thuê phòng, phí phần mềm, hoặc mua thiết bị.",
+                introExamples: [
+                    { name: "Hàng tháng", example: "Adobe Creative Cloud - 500k/tháng" },
+                    { name: "Hàng năm", example: "Gia hạn domain - 300k/năm" },
+                    { name: "Một lần", example: "Laptop mới - 30 triệu (chia đều 3 năm)" }
+                ],
+
+                frequencyTitle: "Các Loại Tần Suất",
+                frequencyDesc: "Chọn tần suất cho mỗi khoản chi:",
+                frequencies: [
+                    { name: "Một lần", desc: "Thanh toán 1 lần, có thể chia đều theo thời gian", example: "Mua thiết bị" },
+                    { name: "Hàng tuần", desc: "Lặp lại mỗi tuần", example: "Thuê trợ lý freelance" },
+                    { name: "Hàng tháng", desc: "Lặp lại mỗi tháng", example: "Tiền thuê, phí đăng ký" },
+                    { name: "Hàng năm", desc: "Lặp lại mỗi năm", example: "License phần mềm" }
+                ],
+
+                calculationTitle: "Cách Tính Chi Phí",
+                calculationDesc: "Hệ thống chia chi phí theo ngày, sau đó nhân với số ngày trong khoảng thời gian bạn chọn.",
+                calculationExample: {
+                    title: "Ví dụ",
+                    desc: "Tiền thuê 3 triệu/tháng. Xem báo cáo 15 ngày: 3,000,000 ÷ 30 ngày × 15 ngày = 1,500,000₫"
+                },
+
+                onetimeTitle: "Chia Đều Chi Phí Một Lần",
+                onetimeDesc: "Với các khoản mua lớn, đặt Ngày kết thúc để chia đều chi phí:",
+                onetimeExample: {
+                    title: "Ví dụ",
+                    desc: "Laptop 30 triệu, dùng 3 năm. Chi phí hàng tháng: 30,000,000 ÷ 36 tháng ≈ 833,000₫/tháng"
+                },
+
+                continuousTitle: "Chi Phí Liên Tục",
+                continuousDesc: "Để trống Ngày kết thúc cho chi phí tiếp diễn vô thời hạn. Đánh dấu 'Ngưng' khi dừng thanh toán.",
+
+                tipsTitle: "Mẹo Sử Dụng",
+                tips: [
+                    "Luôn đặt đúng ngày bắt đầu",
+                    "Với thiết bị, đặt ngày kết thúc bằng thời gian sử dụng",
+                    "Đánh dấu 'Ngưng' thay vì xóa chi phí",
+                    "Kiểm tra Tổng hợp Chi Phí để xem trung bình"
                 ]
             }
         },

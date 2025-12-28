@@ -5,6 +5,7 @@ import { LandingHeader } from '@/components/landing/LandingHeader';
 import { LandingFooter } from '@/components/landing/LandingFooter';
 import { DocsSidebar } from '@/components/docs/DocsSidebar';
 import { DocsLanguageProvider } from '@/contexts/DocsLanguageContext';
+import { auth } from '@/lib/supabase-auth';
 
 export default function DocsLayout({
     children,
@@ -12,12 +13,18 @@ export default function DocsLayout({
     children: React.ReactNode;
 }) {
     const [language, setLanguage] = useState<'en' | 'vi'>('en');
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
 
     useEffect(() => {
         const stored = localStorage.getItem("freelance-flow-language");
         if (stored === "vi" || stored === "en") {
             setLanguage(stored);
         }
+
+        // Check Supabase auth session using same method as page.tsx
+        auth.getSession().then(({ data: session }) => {
+            setIsLoggedIn(!!session);
+        });
     }, []);
 
     const handleLanguageChange = (lang: 'en' | 'vi') => {
@@ -30,7 +37,7 @@ export default function DocsLayout({
     return (
         <DocsLanguageProvider>
             <div className="flex flex-col min-h-screen">
-                <LandingHeader language={language} onLanguageChange={handleLanguageChange} />
+                <LandingHeader language={language} onLanguageChange={handleLanguageChange} isLoggedIn={isLoggedIn} />
 
                 <div className="flex-1 flex">
                     <DocsSidebar />

@@ -5,10 +5,12 @@ import { vi_base } from './i18n/vi/base';
 import { vi_new } from './i18n/vi/new';
 import { vi_project } from './i18n/vi/new';
 import { vi_pert } from './i18n/vi/pert';
+import { vi_fixedcosts } from './i18n/vi/fixedcosts';
 import { en_base } from './i18n/en/base';
 import { en_new } from './i18n/en/new';
 import { en_project } from './i18n/en/new';
 import { en_pert } from './i18n/en/pert';
+import { en_fixedcosts } from './i18n/en/fixedcosts';
 import { Edit } from 'lucide-react';
 
 // Hợp nhất các bản dịch Tiếng Việt
@@ -17,6 +19,7 @@ export const vi = {
   ...vi_new,
   ...vi_project,
   ...vi_pert,
+  ...vi_fixedcosts,
 };
 
 // Hợp nhất các bản dịch Tiếng Anh
@@ -25,6 +28,7 @@ export const en = {
   ...en_new,
   ...en_project,
   ...en_pert,
+  ...en_fixedcosts,
 };
 // Simple language switcher based on user settings
 export const getTranslations = (language: string = 'vi') => {
@@ -40,6 +44,7 @@ export const i18n = {
     ...en_new,
     ...en_project,
     ...en_pert,
+    ...en_fixedcosts,
     pathCopied: 'Path copied to clipboard',
     startDate: 'Start Date'
     , deadline: 'Deadline',
@@ -692,6 +697,7 @@ export const i18n = {
     ...vi_base,
     ...vi_new,
     ...vi_pert,
+    ...vi_fixedcosts,
     pathCopied: 'Đã copy đường dẫn',
     startDate: 'Ngày Bắt Đầu',
     deadline: 'Hạn Chót',
