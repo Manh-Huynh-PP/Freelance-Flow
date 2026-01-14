@@ -13,178 +13,144 @@ interface Token {
     value: number | null;
 }
 
-class FormulaLexer {
-    private text: string;
-    private pos: number;
-    private currentChar: string | null;
+const createLexer = (text: string) => {
+    // Pre-process: remove commas to handle numbers like 1,000 or 1,5 (becomes 15 like in calculator)
+    const processedText = text.replace(/,/g, '');
+    let pos = 0;
 
-    constructor(text: string) {
-        // Pre-process: remove commas to handle numbers like 1,000 or 1,5 (becomes 15 like in calculator)
-        this.text = text.replace(/,/g, '');
-        this.pos = 0;
-        this.currentChar = this.text.length > 0 ? this.text[0] : null;
-    }
+    const getCurrentChar = () => pos < processedText.length ? processedText[pos] : null;
 
-    private advance(): void {
-        this.pos++;
-        this.currentChar = this.pos < this.text.length ? this.text[this.pos] : null;
-    }
+    const advance = () => {
+        pos++;
+    };
 
-    private skipWhitespace(): void {
-        while (this.currentChar !== null && /\s/.test(this.currentChar)) {
-            this.advance();
-        }
-    }
-
-    private number(): number {
+    const number = (): number => {
         let result = '';
-        while (this.currentChar !== null && /[\d.]/.test(this.currentChar)) {
-            result += this.currentChar;
-            this.advance();
+        let char = getCurrentChar();
+
+        while (char !== null && /[\d.]/.test(char)) {
+            result += char;
+            advance();
+            char = getCurrentChar();
         }
 
         // Handle scientific notation (e.g., 1e5, 1.2E-3)
-        if (this.currentChar !== null && /[eE]/.test(this.currentChar)) {
-            result += this.currentChar;
-            this.advance();
-            if (this.currentChar !== null && /[+-]/.test(this.currentChar)) {
-                result += this.currentChar;
-                this.advance();
+        if (char !== null && /[eE]/.test(char)) {
+            result += char;
+            advance();
+            char = getCurrentChar();
+
+            if (char !== null && /[+-]/.test(char)) {
+                result += char;
+                advance();
+                char = getCurrentChar();
             }
-            while (this.currentChar !== null && /\d/.test(this.currentChar)) {
-                result += this.currentChar;
-                this.advance();
+            while (char !== null && /\d/.test(char)) {
+                result += char;
+                advance();
+                char = getCurrentChar();
             }
         }
 
         return parseFloat(result);
-    }
+    };
 
-    getNextToken(): Token {
-        while (this.currentChar !== null) {
-            if (/\s/.test(this.currentChar)) {
-                this.skipWhitespace();
+    const getNextToken = (): Token => {
+        let char = getCurrentChar();
+
+        while (char !== null) {
+            if (/\s/.test(char)) {
+                advance();
+                char = getCurrentChar();
                 continue;
             }
 
-            if (/[\d.]/.test(this.currentChar)) {
-                return { type: 'NUMBER', value: this.number() };
+            if (/[\d.]/.test(char)) {
+                return { type: 'NUMBER', value: number() };
             }
 
-            if (this.currentChar === '+') {
-                this.advance();
-                return { type: 'PLUS', value: null };
-            }
+            if (char === '+') { advance(); return { type: 'PLUS', value: null }; }
+            if (char === '-') { advance(); return { type: 'MINUS', value: null }; }
+            if (char === '*') { advance(); return { type: 'MUL', value: null }; }
+            if (char === '/') { advance(); return { type: 'DIV', value: null }; }
+            if (char === '^') { advance(); return { type: 'POWER', value: null }; }
+            if (char === '(') { advance(); return { type: 'LPAREN', value: null }; }
+            if (char === ')') { advance(); return { type: 'RPAREN', value: null }; }
 
-            if (this.currentChar === '-') {
-                this.advance();
-                return { type: 'MINUS', value: null };
-            }
-
-            if (this.currentChar === '*') {
-                this.advance();
-                return { type: 'MUL', value: null };
-            }
-
-            if (this.currentChar === '/') {
-                this.advance();
-                return { type: 'DIV', value: null };
-            }
-
-            if (this.currentChar === '^') {
-                this.advance();
-                return { type: 'POWER', value: null };
-            }
-
-            if (this.currentChar === '(') {
-                this.advance();
-                return { type: 'LPAREN', value: null };
-            }
-
-            if (this.currentChar === ')') {
-                this.advance();
-                return { type: 'RPAREN', value: null };
-            }
-
-            throw new Error(`Invalid character: ${this.currentChar}`);
+            throw new Error(`Invalid character: ${char}`);
         }
 
         return { type: 'EOF', value: null };
-    }
-}
+    };
 
-class FormulaParser {
-    private lexer: FormulaLexer;
-    private currentToken: Token;
+    return { getNextToken };
+};
 
-    constructor(text: string) {
-        this.lexer = new FormulaLexer(text);
-        this.currentToken = this.lexer.getNextToken();
-    }
+const parseExpression = (text: string): number => {
+    const lexer = createLexer(text);
+    let currentToken = lexer.getNextToken();
 
-    private eat(tokenType: TokenType): void {
-        if (this.currentToken.type === tokenType) {
-            this.currentToken = this.lexer.getNextToken();
+    const eat = (tokenType: TokenType) => {
+        if (currentToken.type === tokenType) {
+            currentToken = lexer.getNextToken();
         } else {
-            throw new Error(`Expected ${tokenType}, got ${this.currentToken.type}`);
+            throw new Error(`Expected ${tokenType}, got ${currentToken.type}`);
         }
-    }
+    };
 
-    private factor(): number {
-        const token = this.currentToken;
+    const factor = (): number => {
+        const token = currentToken;
 
         if (token.type === 'NUMBER') {
-            this.eat('NUMBER');
+            eat('NUMBER');
             return token.value as number;
         }
 
         if (token.type === 'LPAREN') {
-            this.eat('LPAREN');
-            const result = this.expr();
-            this.eat('RPAREN');
+            eat('LPAREN');
+            const result = expr();
+            eat('RPAREN');
             return result;
         }
 
         // Handle unary minus
         if (token.type === 'MINUS') {
-            this.eat('MINUS');
-            return -this.factor();
+            eat('MINUS');
+            return -factor();
         }
 
         // Handle unary plus
         if (token.type === 'PLUS') {
-            this.eat('PLUS');
-            return this.factor();
+            eat('PLUS');
+            return factor();
         }
 
         throw new Error(`Unexpected token: ${token.type}`);
-    }
+    };
 
-    private power(): number {
-        let result = this.factor();
+    const power = (): number => {
+        let result = factor();
 
-        while (this.currentToken.type === 'POWER') {
-            this.eat('POWER');
-            // Using factor() here makes it left-associative for simplicity. 
-            // result = result ^ factor
-            const exponent = this.factor();
+        while (currentToken.type === 'POWER') {
+            eat('POWER');
+            const exponent = factor();
             result = Math.pow(result, exponent);
         }
 
         return result;
-    }
+    };
 
-    private term(): number {
-        let result = this.power();
+    const term = (): number => {
+        let result = power();
 
-        while (this.currentToken.type === 'MUL' || this.currentToken.type === 'DIV') {
-            const token = this.currentToken;
+        while (currentToken.type === 'MUL' || currentToken.type === 'DIV') {
+            const token = currentToken;
             if (token.type === 'MUL') {
-                this.eat('MUL');
-                result *= this.power();
+                eat('MUL');
+                result *= power();
             } else if (token.type === 'DIV') {
-                this.eat('DIV');
-                const divisor = this.power();
+                eat('DIV');
+                const divisor = power();
                 if (divisor === 0) {
                     throw new Error('Division by zero');
                 }
@@ -193,42 +159,40 @@ class FormulaParser {
         }
 
         return result;
-    }
+    };
 
-    private expr(): number {
-        let result = this.term();
+    const expr = (): number => {
+        let result = term();
 
-        while (this.currentToken.type === 'PLUS' || this.currentToken.type === 'MINUS') {
-            const token = this.currentToken;
+        while (currentToken.type === 'PLUS' || currentToken.type === 'MINUS') {
+            const token = currentToken;
             if (token.type === 'PLUS') {
-                this.eat('PLUS');
-                result += this.term();
+                eat('PLUS');
+                result += term();
             } else if (token.type === 'MINUS') {
-                this.eat('MINUS');
-                result -= this.term();
+                eat('MINUS');
+                result -= term();
             }
         }
 
         return result;
+    };
+
+    const result = expr();
+
+    // Ensure we consumed the entire expression
+    if (currentToken.type !== 'EOF') {
+        throw new Error(`Unexpected token at end of expression: ${currentToken.type}`);
     }
 
-    parse(): number {
-        return this.expr();
-    }
-}
+    return result;
+};
 
 /**
  * Safely evaluate a mathematical expression without using eval()
  * 
  * @param expression - The mathematical expression to evaluate (e.g., "2 + 3 * 4")
  * @returns The calculated result, or NaN if the expression is invalid
- * 
- * @example
- * safeEval("2 + 3 * 4") // returns 14
- * safeEval("(2 + 3) * 4") // returns 20
- * safeEval("10 / 2 - 1") // returns 4
- * safeEval("2^3") // returns 8
- * safeEval("1,000 + 5") // returns 1005 (commas ignored)
  */
 export function safeEval(expression: string): number {
     if (!expression || typeof expression !== 'string') {
@@ -243,9 +207,7 @@ export function safeEval(expression: string): number {
     }
 
     try {
-        const parser = new FormulaParser(cleanExpr);
-        const result = parser.parse();
-        return result;
+        return parseExpression(cleanExpr);
     } catch (error) {
         console.warn('Formula parse error:', error, 'Expression:', expression);
         return NaN;

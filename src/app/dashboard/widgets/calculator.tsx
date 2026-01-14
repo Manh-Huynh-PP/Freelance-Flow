@@ -57,7 +57,8 @@ export function Calculator({ settings }: CalculatorProps) {
         setExpression(calculationResult.toString());
       }
     } catch (error: any) {
-      setResult(error.message || 'Error calculating.');
+      // Show actual error message for debugging purposes
+      setResult(error.message ? `Error: ${error.message}` : 'Error calculating.');
     }
   };
 
