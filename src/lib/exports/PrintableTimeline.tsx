@@ -69,16 +69,17 @@ export const PrintableTimeline: React.FC<Props> = ({
   const getUtcTimestamp = (date: any): number => {
     if (!date) return NaN;
 
-    // Handle Date objects
-    if (date instanceof Date) {
-      return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    // Handle strings strictly in YYYY-MM-DD format
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const [y, m, d] = date.split('-').map(Number);
+      return Date.UTC(y, m - 1, d);
     }
 
-    // Handle strings and numbers
+    // For Date objects or other strings (ISO, etc.), use the Local date
     const d = new Date(date);
     if (isNaN(d.getTime())) return NaN;
 
-    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
   };
 
   const getDayNumber = (timestamp: number): number => {

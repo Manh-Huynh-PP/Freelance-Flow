@@ -883,7 +883,7 @@ export function TaskDetailsDialog({
 
   // Enhanced calculation results that match QuoteManager structure
   const calculationResults = useMemo(() => {
-    if (!quote?.sections) return [];
+    if (!localQuote?.sections) return [];
 
     const results: Array<{
       id: string;
@@ -894,13 +894,13 @@ export function TaskDetailsDialog({
     }> = [];
 
     // Process each column with calculations
-    (quote.columns || defaultColumns).filter(col =>
+    (localQuote.columns || defaultColumns).filter(col =>
       col.calculation && col.calculation.type && col.calculation.type !== 'none' && col.type === 'number'
     ).forEach(col => {
       if (!col.calculation) return; // Type guard
 
-      const allValues = quote.sections!.flatMap((section) =>
-        (section.items || []).map((item) => calculateRowValue(item, col, quote.columns || defaultColumns))
+      const allValues = localQuote.sections!.flatMap((section) =>
+        (section.items || []).map((item) => calculateRowValue(item, col, localQuote.columns || defaultColumns))
           .filter((v: number) => !isNaN(v))
       );
 
@@ -953,11 +953,11 @@ export function TaskDetailsDialog({
     });
 
     return results;
-  }, [quote, defaultColumns, calculateRowValue, T]);
+  }, [localQuote, defaultColumns, calculateRowValue, T]);
 
   // Apply saved Summary formula (if any) for main quote's Grand Total
   const displayedGrandTotal = useMemo(() => {
-    const formulaSrc = (quote as any)?.grandTotalFormula as string | undefined;
+    const formulaSrc = (localQuote as any)?.grandTotalFormula as string | undefined;
     if (formulaSrc && typeof formulaSrc === 'string' && formulaSrc.trim() !== '') {
       try {
         let formula = formulaSrc;
@@ -990,7 +990,7 @@ export function TaskDetailsDialog({
       }
     }
     return totalQuote;
-  }, [quote, totalQuote, totalCollabQuote, calculationResults]);
+  }, [localQuote, totalQuote, totalCollabQuote, calculationResults]);
 
   // Enhanced collaborator calculation results for all collaborator quotes
   const collaboratorCalculationResults = useMemo(() => {
@@ -1145,13 +1145,13 @@ export function TaskDetailsDialog({
       // Build snapshot(s)
       const base = { settings, clients, categories } as any;
       const snapshots: any = {};
-      if (includeQuote && quote) {
+      if (includeQuote && localQuote) {
         snapshots.quote = {
           kind: 'quote', schemaVersion: 1,
-          quote, task, ...base,
+          quote: localQuote, task, ...base,
           clientName: clients.find(c => c.id === task.clientId)?.name,
           categoryName: categories.find(c => c.id === task.categoryId)?.name,
-          defaultColumns: (quote.columns || defaultColumns),
+          defaultColumns: (localQuote.columns || defaultColumns),
           calculationResults,
           // provide a simple calc for server-side viewer
           grandTotal: displayedGrandTotal || 0,
@@ -1163,11 +1163,11 @@ export function TaskDetailsDialog({
       }
       if (includeTimeline) {
         // Extract milestones from quote timeline column if available, fallback to task.milestones
-        const milestones = quote ? getMilestonesFromQuote(quote) : (task.milestones || []);
+        const milestones = localQuote ? getMilestonesFromQuote(localQuote) : (task.milestones || []);
         // timeline snapshot prepared
         snapshots.timeline = {
           kind: 'timeline', schemaVersion: 1,
-          task, quote: quote || undefined,
+          task, quote: localQuote || undefined,
           milestones,
           ...base,
           viewMode: 'week',
@@ -1395,7 +1395,7 @@ export function TaskDetailsDialog({
         fileName: `quote-${task.id || 'export'}.png`,
         clients,
         categories,
-        defaultColumns: quote.columns || defaultColumns, // Ensure to pass the actual columns
+        defaultColumns: localQuote?.columns || defaultColumns, // Ensure to pass the actual columns
         calculationResults, // Pass calculated results
         calculateRowValue, // Pass the helper function
         grandTotal: displayedGrandTotal, // Pass the grand total
@@ -1870,15 +1870,15 @@ export function TaskDetailsDialog({
           {/* Price Quote Section */}
           {selectedNav === 'price' && (
             <div className="space-y-4">
-              {quote && quote.sections && quote.sections.length > 0 ? (
+              {localQuote && localQuote.sections && localQuote.sections.length > 0 ? (
                 <>
-                  {renderQuoteTable(T.priceQuote, quote)}
+                  {renderQuoteTable(T.priceQuote, localQuote)}
                   {/* Edit Quote Dialog (edit-only mode) */}
                   <TimelineEditDialog
                     isOpen={isPriceEditOpen}
                     onClose={() => setIsPriceEditOpen(false)}
                     task={task}
-                    quote={quote}
+                    quote={localQuote}
                     settings={settings}
                     onUpdateQuote={stableUpdateQuoteHandler}
                     visibilityState={{}} // not used in editOnly
@@ -2012,7 +2012,7 @@ export function TaskDetailsDialog({
           {selectedNav === 'timelineCreator' && (
             <TimelineCreatorTab
               task={task}
-              quote={quote}
+              quote={localQuote}
               quotes={quotes}
               settings={settings}
               clients={clients}

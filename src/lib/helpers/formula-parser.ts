@@ -3,10 +3,10 @@
 /**
  * Safe Formula Parser
  * Replaces eval() for formula calculations to comply with CSP
- * Supports: +, -, *, /, parentheses, and numbers
+ * Supports: +, -, *, /, ^ (power), parentheses, numbers (including scientific notation), and ignores commas
  */
 
-type TokenType = 'NUMBER' | 'PLUS' | 'MINUS' | 'MUL' | 'DIV' | 'LPAREN' | 'RPAREN' | 'EOF';
+type TokenType = 'NUMBER' | 'PLUS' | 'MINUS' | 'MUL' | 'DIV' | 'POWER' | 'LPAREN' | 'RPAREN' | 'EOF';
 
 interface Token {
     type: TokenType;
@@ -19,9 +19,10 @@ class FormulaLexer {
     private currentChar: string | null;
 
     constructor(text: string) {
-        this.text = text;
+        // Pre-process: remove commas to handle numbers like 1,000 or 1,5 (becomes 15 like in calculator)
+        this.text = text.replace(/,/g, '');
         this.pos = 0;
-        this.currentChar = text.length > 0 ? text[0] : null;
+        this.currentChar = this.text.length > 0 ? this.text[0] : null;
     }
 
     private advance(): void {
@@ -41,6 +42,21 @@ class FormulaLexer {
             result += this.currentChar;
             this.advance();
         }
+
+        // Handle scientific notation (e.g., 1e5, 1.2E-3)
+        if (this.currentChar !== null && /[eE]/.test(this.currentChar)) {
+            result += this.currentChar;
+            this.advance();
+            if (this.currentChar !== null && /[+-]/.test(this.currentChar)) {
+                result += this.currentChar;
+                this.advance();
+            }
+            while (this.currentChar !== null && /\d/.test(this.currentChar)) {
+                result += this.currentChar;
+                this.advance();
+            }
+        }
+
         return parseFloat(result);
     }
 
@@ -73,6 +89,11 @@ class FormulaLexer {
             if (this.currentChar === '/') {
                 this.advance();
                 return { type: 'DIV', value: null };
+            }
+
+            if (this.currentChar === '^') {
+                this.advance();
+                return { type: 'POWER', value: null };
             }
 
             if (this.currentChar === '(') {
@@ -139,17 +160,31 @@ class FormulaParser {
         throw new Error(`Unexpected token: ${token.type}`);
     }
 
-    private term(): number {
+    private power(): number {
         let result = this.factor();
+
+        while (this.currentToken.type === 'POWER') {
+            this.eat('POWER');
+            // Using factor() here makes it left-associative for simplicity. 
+            // result = result ^ factor
+            const exponent = this.factor();
+            result = Math.pow(result, exponent);
+        }
+
+        return result;
+    }
+
+    private term(): number {
+        let result = this.power();
 
         while (this.currentToken.type === 'MUL' || this.currentToken.type === 'DIV') {
             const token = this.currentToken;
             if (token.type === 'MUL') {
                 this.eat('MUL');
-                result *= this.factor();
+                result *= this.power();
             } else if (token.type === 'DIV') {
                 this.eat('DIV');
-                const divisor = this.factor();
+                const divisor = this.power();
                 if (divisor === 0) {
                     throw new Error('Division by zero');
                 }
@@ -192,6 +227,8 @@ class FormulaParser {
  * safeEval("2 + 3 * 4") // returns 14
  * safeEval("(2 + 3) * 4") // returns 20
  * safeEval("10 / 2 - 1") // returns 4
+ * safeEval("2^3") // returns 8
+ * safeEval("1,000 + 5") // returns 1005 (commas ignored)
  */
 export function safeEval(expression: string): number {
     if (!expression || typeof expression !== 'string') {

@@ -8,40 +8,26 @@ import { Button } from '@/components/ui/button';
 import { Copy, Check } from 'lucide-react';
 import type { AppSettings } from '@/lib/types';
 import { i18n } from '@/lib/i18n';
+import { safeEval } from '@/lib/helpers/formula-parser';
 
 const evaluateExpression = (expr: string): number => {
   // Pre-process expression:
-  // 1. Remove commas (1,000 -> 1000)
-  // 2. Replace 'x' or 'X' with '*'
-  // 3. Replace '^' with '**'
-  // 4. Handle implicit multiplication: 2(3) -> 2*(3), )2 -> )*2
+  // 1. Replace 'x' or 'X' with '*'
+  // 2. Handle implicit multiplication: 2(3) -> 2*(3), )2 -> )*2
+  // Note: safeEval handles comma removal and ^ operator natively
   let sanitizedExpr = expr
-    .replace(/,/g, '')
     .replace(/[xX]/g, '*')
-    .replace(/\^/g, '**')
+    .replace(/\*\*/g, '^') // Support JS style power operator by converting to ^
     .replace(/(\d)\s*\(/g, '$1*(')
     .replace(/\)\s*(\d)/g, ')*$1');
 
-  // Sanitize: allow digits, operators, parenthesis, dots, spaces, and 'e'/'E' for scientific notation
-  const cleanExpr = sanitizedExpr.replace(/[^0-9+\-*/().\sEe]/g, '');
+  const result = safeEval(sanitizedExpr);
 
-  if (cleanExpr !== sanitizedExpr) {
-    // If characters were stripped (other than the ones we explicitly handled/allowed), it might be unsafe or invalid
-    // However, we need to be careful. The regex above strips EVERYTHING else. 
-    // Let's just trust the cleanExpr for the Function constructor, but allow for standard math.
-  }
-
-  // Safety check: ensure no malicious code like 'alert', 'window', etc.
-  // We allow 'e' and 'E' for scientific notation, but ban other letters.
-  if (/[a-zA-DF-Za-df-z]/.test(cleanExpr)) {
-    throw new Error("Invalid characters.");
-  }
-
-  try {
-    return new Function(`return ${cleanExpr}`)();
-  } catch (e) {
+  if (isNaN(result)) {
     throw new Error("Invalid mathematical expression.");
   }
+
+  return result;
 };
 
 type CalculatorProps = {

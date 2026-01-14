@@ -218,12 +218,17 @@ const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 const getUtcTimestamp = (date: any): number => {
     if (!date) return NaN;
-    if (date instanceof Date) {
-        return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+
+    // Handle strings strictly in YYYY-MM-DD format
+    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const [y, m, d] = date.split('-').map(Number);
+        return Date.UTC(y, m - 1, d);
     }
+
+    // For Date objects or other strings (ISO, etc.), use the Local date
     const d = new Date(date);
     if (isNaN(d.getTime())) return NaN;
-    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
 };
 
 const getDayNumber = (timestamp: number): number => Math.floor(timestamp / MS_PER_DAY);
