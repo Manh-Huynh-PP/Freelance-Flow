@@ -211,8 +211,11 @@ export default function TimelineViewer({ task, quote, milestones = [], settings,
 
   const dayNumToFormat = (dayNum: number | null): string => {
     if (dayNum === null) return 'Invalid Date';
-    const date = new Date((dayNum * MS_PER_DAY) + (new Date().getTimezoneOffset() * 60 * 1000));
-    return format(date, "dd/MM");
+    // Use UTC date to avoid hydration mismatches from local timezone offsets
+    const date = new Date(dayNum * MS_PER_DAY);
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    return `${day}/${month}`;
   };
 
   // Calculate timeline range

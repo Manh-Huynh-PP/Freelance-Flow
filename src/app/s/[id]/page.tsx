@@ -2,6 +2,7 @@ import dynamic from 'next/dynamic';
 import SharePageClientWrapper from '@/components/share/SharePageClientWrapper';
 import LinkPreview from '@/components/share/LinkPreview';
 import { i18n } from '@/lib/i18n';
+import React from 'react';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { downloadShare } from '@/lib/supabase-storage';
@@ -65,6 +66,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     description,
     openGraph: { title, description },
     twitter: { title, description },
+    robots: {
+      index: false,
+      follow: false,
+    },
   };
 }
 
@@ -76,7 +81,6 @@ export default async function ShareViewerPage({ params }: { params: Promise<{ id
   if (!data) {
     return (
       <div className="mx-auto max-w-3xl p-6">
-        <meta name="robots" content="noindex,nofollow" />
         <h1 className="text-xl font-semibold">Link not found</h1>
         <p className="text-sm text-gray-500">This share may have been revoked or expired.</p>
         <p className="text-xs text-gray-400 mt-4">Share ID: {id}</p>
@@ -115,17 +119,20 @@ export default async function ShareViewerPage({ params }: { params: Promise<{ id
   const quote = quotePart?.quote;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <meta name="robots" content="noindex,nofollow" />
+    <div className="min-h-screen bg-gray-50" suppressHydrationWarning>
       {/* Unified Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 break-words">{task?.name || 'Project'}</h1>
-          <p className="text-sm sm:text-base text-gray-600 break-words">
-            {currentClient?.name && currentCategory?.name ? `${currentClient.name} • ${currentCategory.name}` : (currentClient?.name || currentCategory?.name || '')}
-          </p>
-        </div>
-      </header>
+      <React.Fragment>
+        <header className="bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 break-words">
+              {(task?.name && task.name.trim().length > 0) ? task.name : 'Project'}
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600 break-words">
+              {currentClient?.name && currentCategory?.name ? `${currentClient.name} • ${currentCategory.name}` : (currentClient?.name || currentCategory?.name || '')}
+            </p>
+          </div>
+        </header>
+      </React.Fragment>
 
       {/* Links Section - Right after header */}
       {shouldShowLinks && (

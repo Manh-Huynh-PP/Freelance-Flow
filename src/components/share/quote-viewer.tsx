@@ -4,6 +4,7 @@ import React from 'react';
 import { AppSettings, Category, Client, Quote, QuoteColumn, QuoteItem, Task } from '@/lib/types';
 import { i18n } from '@/lib/i18n';
 import { safeEval } from '@/lib/helpers/formula-parser';
+import { format } from 'date-fns';
 
 type Props = {
   quote: Quote;
@@ -48,6 +49,23 @@ export default function QuoteViewer(props: Props) {
   const { quote, task, settings, clients, categories, clientName, categoryName, defaultColumns = [], calculationResults = [], grandTotal, showHeader = true, hiddenColumnIds = [], showValidityNote = true, showBriefLinks = true, showDriveLinks = true } = props;
   const langPack = (i18n[settings?.language] || i18n.vi || i18n.en || {}) as any;
   const T = { ...langPack, unitPrice: langPack?.unitPrice || 'Unit Price', grandTotal: langPack?.grandTotal || 'Grand Total' } as any;
+  const locale = settings.language === 'vi' ? 'vi-VN' : 'en-US';
+  const dateFormat = settings.language === 'vi' ? 'dd/MM/yyyy' : 'MM/dd/yyyy';
+
+  const formatNumber = (val: number, maxDecimals = 2) => {
+    return val.toLocaleString(locale, { maximumFractionDigits: maxDecimals });
+  };
+
+  const formatDate = (date: any) => {
+    if (!date) return '—';
+    try {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '—';
+      return format(d, dateFormat);
+    } catch {
+      return '—';
+    }
+  };
 
   const mergedHiddenColumnIds = React.useMemo(() => {
     const fromQuote = Array.isArray((quote as any)?.hiddenColumnIds) ? (quote as any).hiddenColumnIds as string[] : [];
@@ -89,8 +107,8 @@ export default function QuoteViewer(props: Props) {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">{task.name || 'Quote'}</h1>
           <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 text-xs sm:text-sm text-gray-600">
             <div><span className="text-gray-500">{(T as any).quoteCode || 'Quote ID'}:</span> <span className="font-medium">{quote.id || '—'}</span></div>
-            <div><span className="text-gray-500">{(T as any).startDate || 'Start'}:</span> <span className="font-medium">{task.startDate ? new Date(task.startDate).toLocaleDateString() : '—'}</span></div>
-            <div><span className="text-gray-500">{(T as any).deadline || 'Deadline'}:</span> <span className="font-medium">{task.deadline ? new Date(task.deadline).toLocaleDateString() : '—'}</span></div>
+            <div><span className="text-gray-500">{(T as any).startDate || 'Start'}:</span> <span className="font-medium">{formatDate(task.startDate)}</span></div>
+            <div><span className="text-gray-500">{(T as any).deadline || 'Deadline'}:</span> <span className="font-medium">{formatDate(task.deadline)}</span></div>
           </div>
         </div>
       )}
@@ -128,7 +146,7 @@ export default function QuoteViewer(props: Props) {
 
                         if (col.type === 'number') {
                           value = calcRowValue(item as any, col, cols);
-                          displayValue = typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(value);
+                          displayValue = formatNumber(Number(value));
                         } else if (col.id === 'timeline') {
                           // Special handling for timeline column - parse JSON and format dates
                           value = (item as any)[col.id] ?? (item as any).customFields?.[col.id] ?? '';
@@ -141,7 +159,7 @@ export default function QuoteViewer(props: Props) {
                                 const start = new Date(timelineData.start);
                                 const end = new Date(timelineData.end);
                                 if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                                  displayValue = `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+                                  displayValue = `${formatDate(start)} - ${formatDate(end)}`;
                                 } else {
                                   displayValue = (T as any).invalidDates || 'Invalid dates';
                                 }
@@ -157,7 +175,7 @@ export default function QuoteViewer(props: Props) {
                               const start = new Date(value.start);
                               const end = new Date(value.end);
                               if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-                                displayValue = `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`;
+                                displayValue = `${formatDate(start)} - ${formatDate(end)}`;
                               } else {
                                 displayValue = (T as any).invalidDates || 'Invalid dates';
                               }
@@ -204,7 +222,7 @@ export default function QuoteViewer(props: Props) {
           {calculationResults.filter(c => c.id !== 'unitPrice' && !c.name.toLowerCase().includes('price')).map(c => (
             <div key={c.id} className="rounded-lg border border-gray-200 bg-white p-3 sm:p-4 shadow-sm">
               <div className="text-xs sm:text-sm text-gray-500 font-medium">{c.name}</div>
-              <div className="text-base sm:text-lg font-semibold text-gray-900 mt-1">{typeof c.result === 'number' ? c.result.toLocaleString() : c.result}</div>
+              <div className="text-base sm:text-lg font-semibold text-gray-900 mt-1">{typeof c.result === 'number' ? formatNumber(c.result) : c.result}</div>
             </div>
           ))}
         </div>
@@ -214,7 +232,7 @@ export default function QuoteViewer(props: Props) {
         <div className="text-center">
           <div className="text-base sm:text-lg font-medium mb-2">{T.grandTotal}</div>
           <div className="text-2xl sm:text-3xl font-bold break-words">
-            {calculatedGrandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} {currency}
+            {formatNumber(calculatedGrandTotal)} {currency}
           </div>
         </div>
       </div>
