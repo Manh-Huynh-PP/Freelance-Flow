@@ -281,26 +281,31 @@ export function useAppData() {
   useEffect(() => {
     if (isLoading || !appData?.tasks || hasAutoIndexedRef.current) return;
 
-    // Bootstrap VectorDB with persisted vectors
-    const persisted = appData.tasks.filter((t: any) => Array.isArray(t.vector) && t.vector.length > 0).map((t: any) => ({
-      id: `task:${t.id}`,
-      text: `${t.name || ''}\n${t.description || ''}`,
-      metadata: { taskId: t.id, project: t.projectId },
-      vector: t.vector,
-    }));
-    if (persisted.length > 0) {
-      VectorDBService.upsert(persisted).catch((e: any) => console.warn('VectorDB bootstrap failed:', e));
-    }
+    // ⏱️ Defer heavy indexing by 5 seconds to let the UI settle
+    const heavyTaskTimer = setTimeout(() => {
+      // Bootstrap VectorDB with persisted vectors
+      const persisted = appData.tasks.filter((t: any) => Array.isArray(t.vector) && t.vector.length > 0).map((t: any) => ({
+        id: `task:${t.id}`,
+        text: `${t.name || ''}\n${t.description || ''}`,
+        metadata: { taskId: t.id, project: t.projectId },
+        vector: t.vector,
+      }));
+      if (persisted.length > 0) {
+        VectorDBService.upsert(persisted).catch((e: any) => console.warn('VectorDB bootstrap failed:', e));
+      }
 
-    // Auto-index tasks without vectors
-    const tasksToIndex = appData.tasks.filter((t: any) => !Array.isArray(t.vector) || t.vector.length === 0);
-    if (tasksToIndex.length > 0) {
-      hasAutoIndexedRef.current = true;
-      console.info(`🔍 Auto-indexing ${tasksToIndex.length} tasks without vectors...`);
-      indexTasks(tasksToIndex, { apiKey: 'server-proxy', model: 'gemini-2.5-flash' })
-        .then(() => console.info(`✅ Auto-indexed ${tasksToIndex.length} tasks successfully`))
-        .catch(e => console.warn('Auto-indexing failed:', e.message || e));
-    }
+      // Auto-index tasks without vectors
+      const tasksToIndex = appData.tasks.filter((t: any) => !Array.isArray(t.vector) || t.vector.length === 0);
+      if (tasksToIndex.length > 0) {
+        hasAutoIndexedRef.current = true;
+        console.info(`🔍 Auto-indexing ${tasksToIndex.length} tasks without vectors (deferred)...`);
+        indexTasks(tasksToIndex, { apiKey: 'server-proxy', model: 'gemini-2.5-flash' })
+          .then(() => console.info(`✅ Auto-indexed ${tasksToIndex.length} tasks successfully`))
+          .catch(e => console.warn('Auto-indexing failed:', e.message || e));
+      }
+    }, 5000);
+
+    return () => clearTimeout(heavyTaskTimer);
   }, [isLoading, appData?.tasks?.length]); // Only re-run when tasks count changes
 
   const lang = (appData?.appSettings?.language as keyof typeof i18n) || 'en';

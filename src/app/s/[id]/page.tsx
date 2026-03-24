@@ -23,7 +23,13 @@ async function getOrigin() {
   return process.env.NEXT_PUBLIC_APP_ORIGIN || 'http://localhost:3000';
 }
 
-async function loadShare(id: string) {
+import { cache } from 'react';
+
+// Revalidate every 60 seconds (ISR)
+export const revalidate = 60;
+
+// Deduplicate share loading within a single request
+const loadShare = cache(async (id: string) => {
   try {
     // Call Supabase directly instead of going through API
     // This avoids issues with server-side fetch being blocked by proxy
@@ -42,7 +48,7 @@ async function loadShare(id: string) {
     console.error('[Share Page] Error loading share:', error);
     return null;
   }
-}
+});
 
 function resolveTask(snapshot: any) {
   if (!snapshot) return undefined;
@@ -88,14 +94,10 @@ export default async function ShareViewerPage({ params }: { params: Promise<{ id
     );
   }
   const snapshot: any = data.data;
-  // fire-and-forget tracking (best-effort)
-  const origin = await getOrigin();
-  fetch(`${origin}/api/share/trackView`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-    cache: 'no-store',
-  }).catch(() => { });
+
+  // fire-and-forget tracking (best-effort, direct server-side call)
+  import('@/lib/supabase-storage').then(mod => mod.trackView(id)).catch(() => { });
+
   // Unified landing-style page
   const task = resolveTask(snapshot) as any;
   const settings = (snapshot as any).settings || (snapshot.kind === 'combined' ? (snapshot.timeline?.settings || snapshot.quote?.settings) : undefined);

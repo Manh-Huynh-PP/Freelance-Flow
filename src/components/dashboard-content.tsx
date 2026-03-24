@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import { useState, useMemo, useEffect, Suspense } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -18,7 +19,25 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { XCircle, Trash2, Filter, Table, CalendarDays, LayoutGrid, Columns3, Download, Maximize2, Minimize2, FolderOpen, RotateCcw, CheckSquare } from "lucide-react";
 import { TaskList } from '@/components/task-list';
-import PertView from '@/app/dashboard/pert/page';
+import { TableView } from './table-view';
+
+// Dynamic imports for heavy views
+const CalendarView = dynamic(() => import('./calendar-view').then(mod => mod.CalendarView), {
+  loading: () => <div className="p-4 space-y-4"><Skeleton className="h-8 w-full" /><Skeleton className="h-[400px] w-full" /></div>
+});
+const EisenhowerView = dynamic(() => import('./eisenhower/EisenhowerView').then(mod => mod.EisenhowerView), {
+  loading: () => <div className="p-4 grid grid-cols-2 gap-4"><Skeleton className="h-[200px]" /><Skeleton className="h-[200px]" /><Skeleton className="h-[200px]" /><Skeleton className="h-[200px]" /></div>
+});
+const KanbanView = dynamic(() => import('./kanban/KanbanView').then(mod => mod.KanbanView), {
+  loading: () => <div className="p-4 flex gap-4 overflow-hidden"><Skeleton className="h-full w-64" /><Skeleton className="h-full w-64" /><Skeleton className="h-full w-64" /></div>
+});
+const GanttView = dynamic(() => import('./calendar/GanttView').then(mod => mod.GanttView), {
+  loading: () => <div className="p-4 space-y-2"><Skeleton className="h-10 w-full" /><Skeleton className="h-[300px] w-full" /></div>
+});
+const PertView = dynamic(() => import('@/app/dashboard/pert/page'), {
+  loading: () => <div className="p-4 flex items-center justify-center h-full"><Skeleton className="h-[400px] w-[600px] rounded-full" /></div>
+});
+
 import type { Task, Quote, Collaborator, Category, Client, AppEvent, AppSettings, QuoteTemplate, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { i18n } from "@/lib/i18n";
@@ -27,11 +46,7 @@ import { Skeleton } from "./ui/skeleton";
 import { FilterChipBar } from '@/components/filter-chip-bar-new';
 import { ViewModeToggle } from '@/components/view-mode-toggle';
 import { PaginationControls } from "./pagination-controls";
-import { TableView } from './table-view';
-import { CalendarView, type CalendarDisplayMode } from './calendar-view';
-import { EisenhowerView } from './eisenhower/EisenhowerView';
-import { KanbanView } from './kanban/KanbanView';
-import { GanttView } from './calendar/GanttView';
+import { type CalendarDisplayMode } from './calendar-view';
 import { useFilterLogic } from '@/hooks/use-filter-logic';
 import { ReadonlyURLSearchParams } from 'next/navigation';
 import { SearchCommand } from '@/components/search-command';
