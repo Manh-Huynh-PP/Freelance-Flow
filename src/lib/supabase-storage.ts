@@ -54,6 +54,7 @@ export interface ShareRecord {
   createdAt: string;
   expiresAt?: string | null;
   viewCount?: number;
+  taskId?: string | null;
 }
 
 export interface ShareBlob {
@@ -217,6 +218,12 @@ export async function listShares(userId: string): Promise<ShareRecord[]> {
   } catch {
     return [];
   }
+}
+
+// Find existing share by taskId
+export async function findShareByTaskId(userId: string, taskId: string): Promise<ShareRecord | null> {
+  const shares = await listShares(userId);
+  return shares.find(s => s.taskId === taskId) || null;
 }
 
 // Delete a share

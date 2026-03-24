@@ -83,6 +83,7 @@ function ShareConfirmModal({
   t,
   isLoading,
   isExportingPdf,
+  existingShare,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -99,11 +100,13 @@ function ShareConfirmModal({
     showValidityNote: boolean;
     showBriefLinks: boolean;
     showDriveLinks: boolean;
+    overwrite: boolean;
   }) => void;
   onExportPdf?: (opts: { includeQuote: boolean; includeTimeline: boolean; showValidityNote: boolean }) => void;
   t: any;
   isLoading?: boolean;
   isExportingPdf?: boolean;
+  existingShare?: { id: string; createdAt: string } | null;
 }) {
   const [includeQuote, setIncludeQuote] = React.useState(defaultIncludeQuote);
   const [includeTimeline, setIncludeTimeline] = React.useState(defaultIncludeTimeline);
@@ -206,6 +209,19 @@ function ShareConfirmModal({
                 Creating share link...
               </div>
             )}
+            {existingShare && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-3 text-sm">
+                <div className="font-medium text-amber-800 dark:text-amber-400 mb-1">
+                  {t.existingShareFound || '⚠️ Task này đã có link share'}
+                </div>
+                <div className="text-xs text-amber-700 dark:text-amber-500">
+                  {t.existingShareDate || 'Tạo lúc:'} {new Date(existingShare.createdAt).toLocaleString()}
+                </div>
+                <div className="text-xs text-amber-700 dark:text-amber-500 mt-1">
+                  {window.location.origin}/s/{existingShare.id}
+                </div>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               A public, unlisted link will be created.
             </p>
@@ -217,21 +233,60 @@ function ShareConfirmModal({
               >
                 {t.cancel || "Cancel"}
               </Button>
-              <Button
-                onClick={() =>
-                  onConfirm({
-                    includeQuote,
-                    includeTimeline,
-                    hideTimelineColumn,
-                    showValidityNote,
-                    showBriefLinks,
-                    showDriveLinks,
-                  })
-                }
-                disabled={(!includeQuote && !includeTimeline) || isLoading}
-              >
-                {isLoading ? "Creating..." : t.createLink || "Create link"}
-              </Button>
+              {existingShare ? (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      onConfirm({
+                        includeQuote,
+                        includeTimeline,
+                        hideTimelineColumn,
+                        showValidityNote,
+                        showBriefLinks,
+                        showDriveLinks,
+                        overwrite: false,
+                      })
+                    }
+                    disabled={(!includeQuote && !includeTimeline) || isLoading}
+                  >
+                    {isLoading ? "Creating..." : t.createNewLink || "Tạo link mới"}
+                  </Button>
+                  <Button
+                    onClick={() =>
+                      onConfirm({
+                        includeQuote,
+                        includeTimeline,
+                        hideTimelineColumn,
+                        showValidityNote,
+                        showBriefLinks,
+                        showDriveLinks,
+                        overwrite: true,
+                      })
+                    }
+                    disabled={(!includeQuote && !includeTimeline) || isLoading}
+                  >
+                    {isLoading ? "Updating..." : t.overwriteLink || "Ghi đè link cũ"}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  onClick={() =>
+                    onConfirm({
+                      includeQuote,
+                      includeTimeline,
+                      hideTimelineColumn,
+                      showValidityNote,
+                      showBriefLinks,
+                      showDriveLinks,
+                      overwrite: false,
+                    })
+                  }
+                  disabled={(!includeQuote && !includeTimeline) || isLoading}
+                >
+                  {isLoading ? "Creating..." : t.createLink || "Create link"}
+                </Button>
+              )}
             </DialogFooter>
           </TabsContent>
 
@@ -1084,6 +1139,27 @@ export function TaskDetailsDialog({
   const [shareResultOpen, setShareResultOpen] = useState(false);
   const [shareResultUrl, setShareResultUrl] = useState<string>('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [existingShare, setExistingShare] = useState<{ id: string; createdAt: string } | null>(null);
+  const [checkingShare, setCheckingShare] = useState(false);
+
+  // Open share modal, checking for existing share first
+  const handleOpenShare = useCallback(async () => {
+    setCheckingShare(true);
+    try {
+      const res = await authFetch(`/api/share/check-task?taskId=${encodeURIComponent(task.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExistingShare(data.existingShare || null);
+      } else {
+        setExistingShare(null);
+      }
+    } catch {
+      setExistingShare(null);
+    } finally {
+      setCheckingShare(false);
+      setShareOpen(true);
+    }
+  }, [task.id]);
   // Helper function to extract milestones from quote timeline column (same logic as TimelineCreatorTab)
   const getMilestonesFromQuote = (quoteData?: Quote): Milestone[] => {
     if (!quoteData?.sections || !quoteData.columns?.some(col => col.id === 'timeline')) {
@@ -1139,7 +1215,7 @@ export function TaskDetailsDialog({
     return milestones;
   };
 
-  const onShareConfirm = async ({ includeQuote, includeTimeline, hideTimelineColumn, showValidityNote, showBriefLinks, showDriveLinks }: { includeQuote: boolean; includeTimeline: boolean; hideTimelineColumn: boolean; showValidityNote: boolean; showBriefLinks: boolean; showDriveLinks: boolean }) => {
+  const onShareConfirm = async ({ includeQuote, includeTimeline, hideTimelineColumn, showValidityNote, showBriefLinks, showDriveLinks, overwrite }: { includeQuote: boolean; includeTimeline: boolean; hideTimelineColumn: boolean; showValidityNote: boolean; showBriefLinks: boolean; showDriveLinks: boolean; overwrite: boolean }) => {
     setShareLoading(true);
     try {
       // Build snapshot(s)
@@ -1184,7 +1260,11 @@ export function TaskDetailsDialog({
       const res = await authFetch('/api/share/create', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'accept': 'application/json' },
-        body: JSON.stringify({ data, taskId: task.id }),
+        body: JSON.stringify({
+          data,
+          taskId: task.id,
+          existingShareId: overwrite && existingShare ? existingShare.id : undefined,
+        }),
       });
       const text = await res.text();
       let out: any = null;
@@ -1198,6 +1278,8 @@ export function TaskDetailsDialog({
       if (url) {
         setShareResultUrl(url);
         setShareResultOpen(true);
+        // Update existingShare to reflect what was just created/overwritten
+        setExistingShare({ id: out.id, createdAt: new Date().toISOString() });
       } else {
         toast({ title: T.saved || 'Created', description: T.createLink || 'Create link' });
       }
@@ -2026,8 +2108,18 @@ export function TaskDetailsDialog({
         <div className="flex items-center justify-between pt-4 border-t mt-6">
           {/* Left: Share */}
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => setShareOpen(true)} title={T.share || 'Share'}>
-              <LinkIcon className="w-4 h-4" />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleOpenShare}
+              disabled={checkingShare}
+              title={T.share || 'Share'}
+            >
+              {checkingShare ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+              ) : (
+                <LinkIcon className="w-4 h-4" />
+              )}
             </Button>
           </div>
           {/* Right: Edit, Duplicate, Delete (icon-only) */}
@@ -2196,6 +2288,7 @@ export function TaskDetailsDialog({
           isExportingPdf={isExportingPdf}
           defaultHideTimelineColumn={hideTimelineForExport}
           defaultShowValidityNote={settings.showValidityNoteByDefault ?? true}
+          existingShare={existingShare}
         />
         <ShareResultDialog
           open={shareResultOpen}

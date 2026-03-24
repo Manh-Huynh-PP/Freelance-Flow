@@ -22,7 +22,8 @@ export function useAuth() {
   useEffect(() => {
     // Get initial session
     auth.getSession().then(({ data: session, error }) => {
-      if (error) {
+      // Silently ignore stale refresh token errors on initial load
+      if (error && !error.message?.includes('Refresh Token')) {
         console.error('Error getting session:', error);
       }
 
@@ -36,7 +37,13 @@ export function useAuth() {
     // Listen for auth changes
     const { data: authListener } = auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
+        // When refresh token is invalid, sign out cleanly and redirect
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          await auth.signOut();
+          setAuthState({ user: null, session: null, loading: false });
+          router.push('/auth/login');
+          return;
+        }
 
         setAuthState(prev => ({
           ...prev,

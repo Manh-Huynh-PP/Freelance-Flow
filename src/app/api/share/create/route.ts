@@ -13,13 +13,14 @@ export async function POST(req: NextRequest) {
     
     const userId = session.user.id as string;
     const body = await req.json();
-    const { data, taskId } = body;
+    const { data, taskId, existingShareId } = body;
     
     if (!data || !data.kind) {
       return NextResponse.json({ error: 'Invalid share data' }, { status: 400 });
     }
     
-    const shareId = generateShareId();
+    // Use existing shareId if overwriting, otherwise generate new one
+    const shareId = existingShareId || generateShareId();
     const shareBlob: ShareBlob = {
       kind: data.kind,
       schemaVersion: data.schemaVersion || 1,
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
       expiresAt: null,
       viewCount: 0,
+      taskId: taskId || null,
     };
     
     const { url } = await uploadShare(userId, shareId, shareBlob, record);
