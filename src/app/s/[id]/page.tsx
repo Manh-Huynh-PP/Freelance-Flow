@@ -126,12 +126,29 @@ export default async function ShareViewerPage({ params }: { params: Promise<{ id
       <React.Fragment>
         <header className="bg-white border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 break-words">
-              {(task?.name && task.name.trim().length > 0) ? task.name : 'Project'}
-            </h1>
-            <p className="text-sm sm:text-base text-gray-600 break-words">
-              {currentClient?.name && currentCategory?.name ? `${currentClient.name} • ${currentCategory.name}` : (currentClient?.name || currentCategory?.name || '')}
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 break-words">
+                  {(task?.name && task.name.trim().length > 0) ? task.name : 'Project'}
+                </h1>
+                <p className="text-sm sm:text-base text-gray-600 break-words">
+                  {currentClient?.name && currentCategory?.name ? `${currentClient.name} • ${currentCategory.name}` : (currentClient?.name || currentCategory?.name || '')}
+                </p>
+              </div>
+              <div className="flex-shrink-0">
+                <SharePageClientWrapper
+                  task={task}
+                  quote={quote}
+                  settings={settings}
+                  clients={clients}
+                  categories={categories}
+                  quotePart={quotePart}
+                  timelinePart={timelinePart}
+                  type="header"
+                  T={T}
+                />
+              </div>
+            </div>
           </div>
         </header>
       </React.Fragment>

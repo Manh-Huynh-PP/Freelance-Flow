@@ -691,6 +691,9 @@ export const i18n = {
     exportCopied: 'Timeline image copied to clipboard',
     exportFailed: 'Timeline export failed',
     noMilestonesYet: 'No milestones generated yet. Adjust task dates or quote items.',
+    exportPdf: 'Export to PDF',
+    exportPdfSuccess: 'PDF exported successfully!',
+    exportPdfPreparing: 'Preparing PDF...',
   },
 
   vi: {
@@ -705,6 +708,9 @@ export const i18n = {
     Month: 'Tháng',
     eisenhowerView: 'Eisenhower Matrix',
     taskNameHeader: 'Tên công việc',
+    exportPdf: 'Xuất file PDF',
+    exportPdfSuccess: 'Xuất PDF thành công!',
+    exportPdfPreparing: 'Đang chuẩn bị PDF...',
     // Search
     noTasksFound: 'Không tìm thấy task nào',
     forKeyword: 'cho từ khóa',

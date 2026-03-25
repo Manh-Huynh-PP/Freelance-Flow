@@ -215,7 +215,7 @@ const formatDate = (dateString?: string | Date | null) => {
         const date =
             dateString instanceof Date ? dateString : new Date(dateString as any);
         if (isNaN(date.getTime())) return "-";
-        return format(date, "MMM dd, yyyy");
+        return format(date, "dd/MM/yyyy");
     } catch {
         return "-";
     }

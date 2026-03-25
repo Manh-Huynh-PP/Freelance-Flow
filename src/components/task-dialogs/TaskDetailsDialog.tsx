@@ -102,7 +102,7 @@ function ShareConfirmModal({
     showDriveLinks: boolean;
     overwrite: boolean;
   }) => void;
-  onExportPdf?: (opts: { includeQuote: boolean; includeTimeline: boolean; showValidityNote: boolean }) => void;
+  onExportPdf?: (opts: { includeQuote: boolean; includeTimeline: boolean; showValidityNote: boolean; hideTimelineColumn: boolean }) => void;
   t: any;
   isLoading?: boolean;
   isExportingPdf?: boolean;
@@ -118,6 +118,7 @@ function ShareConfirmModal({
   // PDF export specific states
   const [pdfIncludeQuote, setPdfIncludeQuote] = React.useState(true);
   const [pdfIncludeTimeline, setPdfIncludeTimeline] = React.useState(true);
+  const [pdfHideTimelineColumn, setPdfHideTimelineColumn] = React.useState(false);
   const [pdfShowValidityNote, setPdfShowValidityNote] = React.useState(true);
 
   return (
@@ -319,6 +320,15 @@ function ShareConfirmModal({
               />
               {t.showValidityNote || "Show validity note"}
             </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={pdfHideTimelineColumn}
+                onChange={(e) => setPdfHideTimelineColumn(e.target.checked)}
+                disabled={isExportingPdf || !pdfIncludeQuote}
+              />
+              {t.hideTimelineColumn || "Hide timeline column in quote"}
+            </label>
             {isExportingPdf && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
@@ -342,6 +352,7 @@ function ShareConfirmModal({
                     includeQuote: pdfIncludeQuote,
                     includeTimeline: pdfIncludeTimeline,
                     showValidityNote: pdfShowValidityNote,
+                    hideTimelineColumn: pdfHideTimelineColumn,
                   })
                 }
                 disabled={
@@ -1293,7 +1304,7 @@ export function TaskDetailsDialog({
   };
 
   // PDF Export handler
-  const onExportPdf = async ({ includeQuote, includeTimeline, showValidityNote }: { includeQuote: boolean; includeTimeline: boolean; showValidityNote: boolean }) => {
+  const onExportPdf = async ({ includeQuote, includeTimeline, showValidityNote, hideTimelineColumn }: { includeQuote: boolean; includeTimeline: boolean; showValidityNote: boolean; hideTimelineColumn: boolean }) => {
     setIsExportingPdf(true);
     try {
       // Create safe filename (remove special chars)
@@ -1303,7 +1314,7 @@ export function TaskDetailsDialog({
 
       await exportProjectReportToPdf({
         task,
-        quote: includeQuote ? localQuote : undefined,
+        quote: includeQuote ? (localQuote as any) : undefined,
         milestones: includeTimeline ? (task.milestones || getMilestonesFromQuote(localQuote)) : [],
         settings,
         clients,
@@ -1315,10 +1326,11 @@ export function TaskDetailsDialog({
         showValidityNote,
         includeQuote,
         includeTimeline,
+        hiddenColumnIds: hideTimelineColumn ? ['timeline'] : [],
         viewMode: 'week',
         fileName: `${safeTaskName}.pdf`,
       });
-      toast({ title: T.exportSuccess || 'PDF exported successfully!' });
+      toast({ title: T.exportPdfSuccess || 'PDF exported successfully!' });
       setShareOpen(false);
     } catch (e: any) {
       console.error('PDF export failed:', e);

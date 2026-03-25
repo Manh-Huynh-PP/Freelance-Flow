@@ -243,7 +243,13 @@ const dateToDayNum = (date: any): number | null => {
 const dayNumToFormat = (dayNum: number | null): string => {
     if (dayNum === null) return "-";
     const date = new Date(dayNum * MS_PER_DAY + new Date().getTimezoneOffset() * 60 * 1000);
-    return format(date, "dd/MM"); // Date without year for compact display
+    return format(date, "dd/MM/yyyy");
+};
+
+const dayNumToHeaderFormat = (dayNum: number | null): string => {
+    if (dayNum === null) return "-";
+    const date = new Date(dayNum * MS_PER_DAY + new Date().getTimezoneOffset() * 60 * 1000);
+    return format(date, "dd/MM"); // Compact for grid headers
 };
 
 export const PDFTimeline: React.FC<Props> = ({
@@ -367,7 +373,7 @@ export const PDFTimeline: React.FC<Props> = ({
     for (let i = 0; i < totalDays; i++) {
         dateHeaders.push({
             dayNum: startDay + i,
-            label: dayNumToFormat(startDay + i),
+            label: dayNumToHeaderFormat(startDay + i),
         });
     }
 

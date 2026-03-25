@@ -13,7 +13,7 @@ interface SharePageClientWrapperProps {
   categories: Category[];
   quotePart: any;
   timelinePart: any;
-  type: 'quote' | 'timeline';
+  type: 'quote' | 'timeline' | 'header';
   T: any;
 }
 
@@ -223,6 +223,8 @@ export default function SharePageClientWrapper({
       viewMode={timelinePart?.viewMode || 'week'}
       timelineScale={timelinePart?.timelineScale || 1}
       T={T}
+      quotePart={quotePart}
+      timelinePart={timelinePart}
     />
   );
 }

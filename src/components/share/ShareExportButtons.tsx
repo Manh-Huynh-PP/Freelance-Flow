@@ -2,12 +2,13 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Image, FileSpreadsheet } from 'lucide-react';
+import { Image, FileSpreadsheet, FileDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import exportQuoteImageToClipboard from '@/lib/exports/exportImageToClipboard';
 import exportTimelineToClipboard from '@/lib/exports/exportTimelineToClipboard';
 import exportQuoteToExcel from '@/lib/exports/exportQuoteToExcel';
 import exportTimelineToExcel from '@/lib/exports/exportTimelineToExcel';
+import exportProjectReportToPdf from '@/lib/exports/exportProjectReportToPdf';
 import type { Task, Quote, AppSettings, Client, Category, QuoteColumn, Milestone } from '@/lib/types';
 import { safeEval } from '@/lib/helpers/formula-parser';
 
@@ -21,10 +22,12 @@ interface ShareExportButtonsProps {
   calculationResults: Array<{ id: string; name: string; calculation: string; result: number | string; type: any }>;
   grandTotal: number;
   milestones?: Milestone[];
-  type: 'quote' | 'timeline';
+  type: 'quote' | 'timeline' | 'header';
   viewMode?: 'day' | 'week' | 'month';
   timelineScale?: number;
   T: any;
+  quotePart?: any;
+  timelinePart?: any;
 }
 
 export default function ShareExportButtons({
@@ -41,10 +44,13 @@ export default function ShareExportButtons({
   viewMode = 'week',
   timelineScale = 1,
   T,
+  quotePart,
+  timelinePart,
 }: ShareExportButtonsProps) {
   const { toast } = useToast();
   const [exportingImage, setExportingImage] = React.useState(false);
   const [exportingExcel, setExportingExcel] = React.useState(false);
+  const [exportingPdf, setExportingPdf] = React.useState(false);
 
   // Helper function to calculate row value with formula support
   const calculateRowValue = React.useCallback((item: any, column: QuoteColumn, allColumns: QuoteColumn[]) => {
@@ -212,6 +218,45 @@ export default function ShareExportButtons({
     }
   };
 
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      toast({ title: T.exportPdfPreparing || 'Preparing PDF...' });
+
+      await exportProjectReportToPdf({
+        task,
+        quote: (quotePart?.quote || quote) as any,
+        milestones,
+        settings,
+        clients,
+        categories,
+        defaultColumns: (quotePart?.quote || quote)?.columns || defaultColumns,
+        calculationResults,
+        calculateRowValue,
+        grandTotal,
+        showValidityNote: quotePart?.showValidityNote !== false,
+        includeQuote: !!quotePart,
+        includeTimeline: !!timelinePart,
+        hiddenColumnIds: quotePart?.hiddenColumnIds || [],
+        viewMode: (timelinePart?.viewMode as any) || viewMode,
+        fileName: `project-report-${task.id || 'export'}.pdf`,
+      });
+
+      toast({
+        title: T.exportPdfSuccess || 'PDF exported successfully!',
+      });
+    } catch (err: any) {
+      console.error('Export PDF failed', err);
+      toast({
+        variant: 'destructive',
+        title: T.exportFailed || 'Export failed',
+        description: err?.message || String(err)
+      });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   if (type === 'quote') {
     return (
       <div className="flex gap-1">
@@ -279,6 +324,25 @@ export default function ShareExportButtons({
           )}
         </Button>
       </div>
+    );
+  }
+
+  if (type === 'header') {
+    return (
+      <Button
+        variant="default"
+        size="sm"
+        onClick={handleExportPdf}
+        disabled={exportingPdf}
+        className="gap-2"
+      >
+        {exportingPdf ? (
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+        ) : (
+          <FileDown className="w-4 h-4" />
+        )}
+        <span className="hidden sm:inline">{T.exportPdf || 'Download PDF'}</span>
+      </Button>
     );
   }
 
