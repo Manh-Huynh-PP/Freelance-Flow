@@ -27,20 +27,25 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import type { Client, Task } from "@/lib/types";
-import { Pencil, PlusCircle, Trash2, Mail, Phone, Info, Link as LinkIcon } from "lucide-react";
+import type { Client, Task, Quote, CollaboratorQuote } from "@/lib/types";
+import { Pencil, PlusCircle, Trash2, Mail, Phone, Info, Link as LinkIcon, ClipboardCopy, TrendingUp, TrendingDown, DollarSign, Briefcase, ChevronRight } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { i18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type ClientManagerProps = {
   clients: Client[];
   tasks: Task[];
+  quotes: Quote[];
+  collaboratorQuotes: CollaboratorQuote[];
   onAddClient: (data: Omit<Client, 'id'>) => void;
   onEditClient: (id: string, data: Omit<Client, 'id'>) => void;
   onDeleteClient: (id: string) => void;
   language: 'en' | 'vi';
+  currency: 'VND' | 'USD';
 };
 
 const defaultClientData = {
@@ -52,13 +57,22 @@ const defaultClientData = {
     driveLink: [""],
 }
 
-export function ClientManager({ clients, tasks, onAddClient, onEditClient, onDeleteClient, language }: ClientManagerProps) {
+export function ClientManager({ 
+    clients, 
+    tasks, 
+    quotes, 
+    collaboratorQuotes, 
+    onAddClient, 
+    onEditClient, 
+    onDeleteClient, 
+    language, 
+    currency 
+}: ClientManagerProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newClientData, setNewClientData] = useState(defaultClientData);
 
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [viewingClient, setViewingClient] = useState<Client | null>(null);
-  const [viewingClientTaskCount, setViewingClientTaskCount] = useState(0);
   const { toast } = useToast();
 
   const T = i18n[language];
@@ -93,7 +107,6 @@ export function ClientManager({ clients, tasks, onAddClient, onEditClient, onDel
 
   const handleConfirmEdit = (editedData: Omit<Client, 'id'>) => {
     if (editingClient) {
-      // Đảm bảo name là string
       const safeName = typeof editedData.name === 'string' ? editedData.name : Array.isArray(editedData.name) ? editedData.name[0] : '';
       onEditClient(editingClient.id, { ...editedData, name: safeName });
       toast({ title: T.clientUpdated, description: `${T.client} "${safeName}" ${T.clientUpdatedDesc}` });
@@ -160,20 +173,18 @@ export function ClientManager({ clients, tasks, onAddClient, onEditClient, onDel
               {clients.map((client) => {
                 const taskCount = tasks.filter(task => task.clientId === client.id).length;
                 return (
-                <div key={client.id} className={cn("flex items-start justify-between p-3 border-b last:border-b-0 hover:bg-muted/50 odd:bg-muted/50")} onClick={() => {
+                <div key={client.id} className={cn("flex items-start justify-between p-3 border-b last:border-b-0 hover:bg-muted/50 odd:bg-muted/50 transition-colors pointer-events-auto cursor-pointer")} onClick={() => {
                   setViewingClient(client)
-                  setViewingClientTaskCount(taskCount)
                 }}>
                   <div className="flex-1 pr-2 space-y-1">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium">{client.name}</p>
+                      <p className="font-medium text-primary hover:underline">{client.name}</p>
                       {taskCount > 0 && <Badge variant="outline">{taskCount}</Badge>}
                       {client.type && <Badge variant="secondary" className="capitalize">{client.type === 'brand' ? T.brand : T.agency}</Badge>}
                       {client.driveLink && <a href={Array.isArray(client.driveLink) ? client.driveLink[0] : client.driveLink} target="_blank" rel="noopener noreferrer" title={Array.isArray(client.driveLink) ? client.driveLink[0] : client.driveLink} onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-primary"><LinkIcon className="h-3 w-3" /></a>}
                     </div>
-                    {client.email && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3 w-3" /><span>{client.email}</span></div>}
-                    {client.phone && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3 w-3" /><span>{client.phone}</span></div>}
-                    {client.taxInfo && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Info className="h-3 w-3" /><span>{client.taxInfo}</span></div>}
+                    {(client.email && client.email.length > 0) && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Mail className="h-3 w-3" /><span>{Array.isArray(client.email) ? client.email[0] : client.email}</span></div>}
+                    {(client.phone && client.phone.length > 0) && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Phone className="h-3 w-3" /><span>{Array.isArray(client.phone) ? client.phone[0] : client.phone}</span></div>}
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleStartEdit(client); }}>
@@ -208,13 +219,16 @@ export function ClientManager({ clients, tasks, onAddClient, onEditClient, onDel
       
       <ViewClientDialog
         client={viewingClient}
-        taskCount={viewingClientTaskCount}
+        tasks={tasks}
+        quotes={quotes}
+        collaboratorQuotes={collaboratorQuotes}
         onClose={() => setViewingClient(null)}
         onEdit={(clientToEdit) => {
           setViewingClient(null);
           handleStartEdit(clientToEdit);
         }}
         language={language}
+        currency={currency}
       />
       
       <EditClientDialog 
@@ -228,50 +242,289 @@ export function ClientManager({ clients, tasks, onAddClient, onEditClient, onDel
 }
 
 // View Client Dialog Component
-function ViewClientDialog({ client, taskCount, onClose, onEdit, language }: { client: Client | null, taskCount: number, onClose: () => void, onEdit: (client: Client) => void, language: 'en' | 'vi' }) {
+function ViewClientDialog({ 
+  client, 
+  tasks, 
+  quotes, 
+  collaboratorQuotes, 
+  onClose, 
+  onEdit, 
+  language,
+  currency 
+}: { 
+  client: Client | null, 
+  tasks: Task[], 
+  quotes: Quote[],
+  collaboratorQuotes: CollaboratorQuote[],
+  onClose: () => void, 
+  onEdit: (client: Client) => void, 
+  language: 'en' | 'vi',
+  currency: 'VND' | 'USD'
+}) {
     if (!client) return null;
     const T = i18n[language];
+    const { toast } = useToast();
+
+    const clientTasks = tasks.filter(t => t.clientId === client.id);
+    
+    // Financial stats
+    let totalIncome = 0;
+    let totalCosts = 0;
+    let receivedAmount = 0;
+
+    clientTasks.forEach(task => {
+        // Income from main quote
+        if (task.quoteId) {
+            const quote = quotes.find(q => q.id === task.quoteId);
+            if (quote) {
+                totalIncome += quote.total || 0;
+                receivedAmount += quote.amountPaid || 0;
+            }
+        }
+
+        // Costs from collaborator quotes
+        if (task.collaboratorQuotes && Array.isArray(task.collaboratorQuotes)) {
+            task.collaboratorQuotes.forEach(cqMapping => {
+                const cq = collaboratorQuotes.find(q => q.id === cqMapping.quoteId);
+                if (cq) {
+                    totalCosts += cq.total || 0;
+                }
+            });
+        }
+    });
+
+    const netProfit = totalIncome - totalCosts;
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'en-US', {
+            style: 'currency',
+            currency: currency,
+            maximumFractionDigits: 0
+        }).format(amount);
+    };
+
+    const handleCopyData = async () => {
+        const tsvHeader = `${T.clientName}\t${client.name}\n${T.email}\t${Array.isArray(client.email) ? client.email.join(', ') : client.email}\n${T.phone}\t${Array.isArray(client.phone) ? client.phone.join(', ') : client.phone}\n\n`;
+        
+        const statsHeader = `${T.financialOverview}\n${T.totalRevenue}\t${totalIncome}\n${T.totalCosts}\t${totalCosts}\n${T.netProfit}\t${netProfit}\n${T.receivedAmount}\t${receivedAmount}\n\n`;
+        
+        let tasksTable = `${T.tasksList}\n${T.taskName}\t${T.status}\t${T.deadline}\t${T.taskValue}\n`;
+        
+        clientTasks.forEach(task => {
+            const quote = quotes.find(q => q.id === task.quoteId);
+            const statusTranslated = T.statuses[task.status as keyof typeof T.statuses] || task.status;
+            const deadlineFormatted = task.deadline ? new Date(task.deadline).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : '-';
+            const value = quote?.total || 0;
+            
+            tasksTable += `${task.name}\t${statusTranslated}\t${deadlineFormatted}\t${value}\n`;
+        });
+
+        const fullData = tsvHeader + statsHeader + tasksTable;
+
+        try {
+            await navigator.clipboard.writeText(fullData);
+            toast({
+                title: T.dataCopied,
+                description: T.readyToPaste || 'Ready to paste into Excel/Sheets',
+            });
+        } catch (err) {
+            console.error('Failed to copy data: ', err);
+            toast({
+                variant: 'destructive',
+                title: 'Copy failed',
+                description: 'Could not copy data to clipboard',
+            });
+        }
+    };
 
     return (
         <Dialog open={!!client} onOpenChange={(isOpen) => !isOpen && onClose()}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogDescription>
-                        {client.type ? <Badge variant="outline" className="capitalize">{client.type === 'brand' ? T.brand : T.agency}</Badge> : T.viewClientDetails}
-                    </DialogDescription>
-                    <DialogTitle className="flex items-center gap-2">
-                      {client.name}
-                      {taskCount > 0 && <Badge variant="outline">{taskCount} {T.task.toLowerCase()}{taskCount > 1 ? 's' : ''}</Badge>}
-                    </DialogTitle>
+            <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+                <DialogHeader className="p-6 pb-2">
+                    <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                                <DialogTitle className="text-2xl font-bold">{client.name}</DialogTitle>
+                                {client.type && (
+                                    <Badge variant="secondary" className="capitalize">
+                                        {client.type === 'brand' ? T.brand : T.agency}
+                                    </Badge>
+                                )}
+                            </div>
+                            <DialogDescription className="flex items-center gap-2">
+                                <Briefcase className="h-4 w-4" />
+                                {clientTasks.length} {T.task.toLowerCase()}
+                            </DialogDescription>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={handleCopyData} className="gap-2">
+                            <ClipboardCopy className="h-4 w-4" />
+                            {T.copyData}
+                        </Button>
+                    </div>
                 </DialogHeader>
-                <div className="py-4 space-y-3">
-                    {client.email && (
-                        <div className="grid grid-cols-3 items-center gap-4">
-                            <Label className="text-muted-foreground text-right">{T.email}</Label>
-                            <p className="col-span-2 text-sm">{client.email}</p>
-                        </div>
-                    )}
-                    {client.phone && (
-                        <div className="grid grid-cols-3 items-center gap-4">
-                            <Label className="text-muted-foreground text-right">{T.phone}</Label>
-                            <p className="col-span-2 text-sm">{client.phone}</p>
-                        </div>
-                    )}
-                    {client.taxInfo && (
-                        <div className="grid grid-cols-3 items-center gap-4">
-                            <Label className="text-muted-foreground text-right">{T.taxInfo}</Label>
-                            <p className="col-span-2 text-sm">{client.taxInfo}</p>
-                        </div>
-                    )}
-                    {client.driveLink && (
-                        <div className="grid grid-cols-3 items-center gap-4">
-                            <Label className="text-muted-foreground text-right">{T.driveLink}</Label>
-                            <a href={Array.isArray(client.driveLink) ? client.driveLink[0] : client.driveLink} target="_blank" rel="noopener noreferrer" className="col-span-2 text-sm text-primary hover:underline truncate">{Array.isArray(client.driveLink) ? client.driveLink[0] : client.driveLink}</a>
-                        </div>
-                    )}
-                </div>
-                <DialogFooter>
-                    <Button type="button" variant="ghost" onClick={onClose}>{T.close}</Button>
+
+                <Tabs defaultValue="details" className="flex-1 overflow-hidden flex flex-col">
+                    <div className="px-6 border-b">
+                        <TabsList className="bg-transparent h-12 w-full justify-start gap-6 rounded-none p-0">
+                            <TabsTrigger 
+                                value="details" 
+                                className="relative rounded-none border-b-2 border-transparent px-2 pb-3 pt-2 font-medium text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                            >
+                                {T.viewClientDetails}
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="tasks" 
+                                className="relative rounded-none border-b-2 border-transparent px-2 pb-3 pt-2 font-medium text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                            >
+                                {T.tasksList}
+                            </TabsTrigger>
+                            <TabsTrigger 
+                                value="stats" 
+                                className="relative rounded-none border-b-2 border-transparent px-2 pb-3 pt-2 font-medium text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                            >
+                                {T.financialOverview}
+                            </TabsTrigger>
+                        </TabsList>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto px-6 py-4">
+                        <TabsContent value="details" className="mt-0 space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-4">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs text-muted-foreground uppercase">{T.email}</Label>
+                                        <div className="flex items-center gap-2">
+                                            <Mail className="h-4 w-4 text-muted-foreground" />
+                                            <span className="text-sm font-medium">{Array.isArray(client.email) ? client.email.join(', ') : client.email || '-'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs text-muted-foreground uppercase">{T.phone}</Label>
+                                        <div className="flex items-center gap-2">
+                                            <Phone className="h-4 w-4 text-muted-foreground" />
+                                            <span className="text-sm font-medium">{Array.isArray(client.phone) ? client.phone.join(', ') : client.phone || '-'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs text-muted-foreground uppercase">{T.taxInfo}</Label>
+                                        <div className="flex items-center gap-2">
+                                            <Info className="h-4 w-4 text-muted-foreground" />
+                                            <span className="text-sm font-medium">{Array.isArray(client.taxInfo) ? client.taxInfo.join(', ') : client.taxInfo || '-'}</span>
+                                        </div>
+                                    </div>
+                                    {client.driveLink && (
+                                        <div className="space-y-1">
+                                            <Label className="text-xs text-muted-foreground uppercase">{T.driveLink}</Label>
+                                            <div className="flex items-center gap-2">
+                                                <LinkIcon className="h-4 w-4 text-muted-foreground" />
+                                                <a 
+                                                    href={Array.isArray(client.driveLink) ? client.driveLink[0] : client.driveLink} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="text-sm font-medium text-primary hover:underline truncate max-w-[200px]"
+                                                >
+                                                    {T.openInNewTab}
+                                                </a>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </TabsContent>
+
+                        <TabsContent value="tasks" className="mt-0">
+                            {clientTasks.length > 0 ? (
+                                <div className="rounded-md border overflow-x-auto mt-2">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>{T.taskName}</TableHead>
+                                                <TableHead>{T.status}</TableHead>
+                                                <TableHead className="text-right">{T.taskValue}</TableHead>
+                                                <TableHead></TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {clientTasks.map(task => {
+                                                const quote = quotes.find(q => q.id === task.quoteId);
+                                                return (
+                                                    <TableRow key={task.id}>
+                                                        <TableCell className="font-medium">{task.name}</TableCell>
+                                                        <TableCell>
+                                                            <Badge variant="outline" className="text-[10px]">
+                                                                {T.statuses[task.status as keyof typeof T.statuses] || task.status}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono text-xs">
+                                                            {quote ? formatCurrency(quote.total) : '-'}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-muted-foreground italic">
+                                    {T.noTasksFound || 'No tasks assigned to this client.'}
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="stats" className="mt-0 space-y-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="rounded-xl border bg-card p-4 space-y-2">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <TrendingUp className="h-4 w-4 text-emerald-500" />
+                                        <span className="text-xs font-medium uppercase tracking-wider">{T.totalRevenue}</span>
+                                    </div>
+                                    <div className="text-2xl font-bold">{formatCurrency(totalIncome)}</div>
+                                    <p className="text-[10px] text-muted-foreground">{T.receivedAmount}: <span className="font-medium text-emerald-600">{formatCurrency(receivedAmount)}</span></p>
+                                </div>
+                                <div className="rounded-xl border bg-card p-4 space-y-2">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <TrendingDown className="h-4 w-4 text-rose-500" />
+                                        <span className="text-xs font-medium uppercase tracking-wider">{T.totalCosts}</span>
+                                    </div>
+                                    <div className="text-2xl font-bold">{formatCurrency(totalCosts)}</div>
+                                    <p className="text-[10px] text-muted-foreground">{T.netProfit}: <span className={cn("font-medium", netProfit >= 0 ? "text-emerald-600" : "text-rose-600")}>{formatCurrency(netProfit)}</span></p>
+                                </div>
+                            </div>
+
+                            <div className="rounded-xl border bg-card p-4">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <DollarSign className="h-5 w-5 text-primary" />
+                                    <h5 className="font-semibold">{T.financialOverview}</h5>
+                                </div>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">{T.totalRevenue}</span>
+                                        <span className="font-medium font-mono">{formatCurrency(totalIncome)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-muted-foreground">{T.totalCosts}</span>
+                                        <span className="font-medium font-mono text-rose-500">-{formatCurrency(totalCosts)}</span>
+                                    </div>
+                                    <div className="h-px bg-border my-2" />
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-bold">{T.netProfit}</span>
+                                        <span className={cn("font-bold font-mono text-lg", netProfit >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                            {formatCurrency(netProfit)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </TabsContent>
+                    </div>
+                </Tabs>
+
+                <DialogFooter className="p-6 pt-2 border-t">
+                    <Button type="button" variant="ghost" onClick={onClose}>{T.cancel}</Button>
                     <Button onClick={() => onEdit(client)}>
                         <Pencil className="mr-2 h-4 w-4" /> {T.edit}
                     </Button>
@@ -280,7 +533,6 @@ function ViewClientDialog({ client, taskCount, onClose, onEdit, language }: { cl
         </Dialog>
     );
 }
-
 
 // Separate component for the Edit Dialog for cleaner state management
 type EditClientDialogProps = {

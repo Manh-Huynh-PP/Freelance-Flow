@@ -11,7 +11,6 @@ import { en_new } from './i18n/en/new';
 import { en_project } from './i18n/en/new';
 import { en_pert } from './i18n/en/pert';
 import { en_fixedcosts } from './i18n/en/fixedcosts';
-import { Edit } from 'lucide-react';
 
 // Hợp nhất các bản dịch Tiếng Việt
 export const vi = {
@@ -46,8 +45,8 @@ export const i18n = {
     ...en_pert,
     ...en_fixedcosts,
     pathCopied: 'Path copied to clipboard',
-    startDate: 'Start Date'
-    , deadline: 'Deadline',
+    startDate: 'Start Date',
+    deadline: 'Deadline',
     // Views
     Day: 'Day',
     Month: 'Month',
@@ -58,6 +57,19 @@ export const i18n = {
     forKeyword: 'for keyword',
     clearSearch: 'Clear search',
     searchTasks: 'Search tasks...',
+    exportExcel: 'Export Excel',
+    financialOverview: 'Financial Overview',
+    tasksList: 'Tasks List',
+    taskValue: 'Task Value',
+    totalRevenue: 'Total Revenue',
+    totalCosts: 'Total Costs',
+    netProfit: 'Net Profit',
+    receivedAmount: 'Received Amount',
+    clientName: 'Client Name',
+    openInNewTab: 'Open in new tab',
+    copyData: 'Copy Data',
+    dataCopied: 'Data copied to clipboard',
+    readyToPaste: 'Ready to paste into Excel/Sheets',
 
     // General
     cancel: 'Cancel',
@@ -150,7 +162,7 @@ export const i18n = {
 
     // Hero Section
     heroTitle: 'Streamline Your Freelance Workflow',
-    heroDesc: 'Manage your tasks, clients, and quotes all in one place. Focus on what you do best, we’ll handle the rest.',
+    heroDesc: 'Manage your tasks, clients, and quotes all in one place. Focus on what you do best, we\'ll handle the rest.',
     heroCTA: 'Get Started',
 
     // Features Section
@@ -716,6 +728,16 @@ export const i18n = {
     forKeyword: 'cho từ khóa',
     clearSearch: 'Xóa tìm kiếm',
     searchTasks: 'Tìm kiếm task...',
+    exportExcel: 'Xuất Excel',
+    financialOverview: 'Tổng quan tài chính',
+    tasksList: 'Danh sách công việc',
+    taskValue: 'Giá trị công việc',
+    receivedAmount: 'Đã thanh toán',
+    totalRevenue: 'Tổng doanh thu',
+    totalCosts: 'Tổng chi phí',
+    netProfit: 'Lợi nhuận ròng',
+    clientName: 'Tên khách hàng',
+    openInNewTab: 'Mở trong tab mới',
 
     // General
     cancel: 'Hủy',
@@ -1332,21 +1354,23 @@ export const i18n = {
     },
     weekdaysShort: {
       monday: 'T2',
-      // Timeline Creator
-      timelineCreator: 'Tạo Timeline',
-      exportImage: 'Xuất ảnh',
-      copyImageToClipboard: 'Sao chép ảnh timeline vào clipboard',
-      exportPreparing: 'Đang chuẩn bị ảnh timeline...',
-      exportCopied: 'Ảnh timeline đã được sao chép vào clipboard',
-      exportFailed: 'Xuất timeline thất bại',
-      noMilestonesYet: 'Chưa có milestone nào được tạo. Hãy điều chỉnh ngày bắt đầu, ngày kết thúc hoặc các mục báo giá.',
       tuesday: 'T3',
       wednesday: 'T4',
       thursday: 'T5',
       friday: 'T6',
       saturday: 'T7',
       sunday: 'CN'
-    }
-
+    },
+    // Timeline Creator
+    timelineCreator: 'Tạo Timeline',
+    exportImage: 'Xuất ảnh',
+    copyImageToClipboard: 'Sao chép ảnh timeline vào clipboard',
+    exportPreparing: 'Đang chuẩn bị ảnh timeline...',
+    exportCopied: 'Ảnh timeline đã được sao chép vào clipboard',
+    exportFailed: 'Xuất timeline thất bại',
+    noMilestonesYet: 'Chưa có milestone nào được tạo. Hãy điều chỉnh ngày bắt đầu, ngày kết thúc hoặc các mục báo giá.',
+    copyData: 'Sao chép dữ liệu',
+    dataCopied: 'Đã sao chép vào clipboard',
+    readyToPaste: 'Dữ liệu đã sẵn sàng để dán vào Excel/Sheets'
   }
 };

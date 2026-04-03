@@ -121,6 +121,18 @@ function ShareConfirmModal({
   const [pdfHideTimelineColumn, setPdfHideTimelineColumn] = React.useState(false);
   const [pdfShowValidityNote, setPdfShowValidityNote] = React.useState(true);
 
+  // Reset states when modal opens with new default values
+  React.useEffect(() => {
+    if (open) {
+      setIncludeQuote(defaultIncludeQuote);
+      setIncludeTimeline(defaultIncludeTimeline);
+      setHideTimelineColumn(defaultHideTimelineColumn);
+      setShowValidityNote(defaultShowValidityNote);
+      setShowBriefLinks(defaultShowBriefLinks);
+      setShowDriveLinks(defaultShowDriveLinks);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -679,6 +691,13 @@ function LinksDisplay({
   );
 }
 
+// Eisenhower color schemes - defined outside component to avoid re-creation
+const EISENHOWER_SCHEMES: Record<string, Record<'do' | 'decide' | 'delegate' | 'delete', string>> = {
+  colorScheme1: { do: '#ef4444', decide: '#3b82f6', delegate: '#f59e42', delete: '#6b7280' },
+  colorScheme2: { do: '#d8b4fe', decide: '#bbf7d0', delegate: '#fed7aa', delete: '#bfdbfe' },
+  colorScheme3: { do: '#99f6e4', decide: '#fbcfe8', delegate: '#fde68a', delete: '#c7d2fe' },
+};
+
 export function TaskDetailsDialog({
   task,
   client,
@@ -786,32 +805,18 @@ export function TaskDetailsDialog({
   const [currentStatusId, setCurrentStatusId] = useState<string>(task.status);
   React.useEffect(() => {
     setCurrentStatusId(task.status);
-  }, [task.status, isOpen]);
-
-  // Eisenhower flag color (reuse schemes from other views)
-  const eisenhowerFlagColor = useMemo(() => {
+  }, [task.status, isOpen]);  const eisenhowerFlagColor = useMemo(() => {
     const scheme = settings?.eisenhowerColorScheme || 'colorScheme1';
-    const schemes: Record<string, Record<'do' | 'decide' | 'delegate' | 'delete', string>> = {
-      colorScheme1: { do: '#ef4444', decide: '#3b82f6', delegate: '#f59e42', delete: '#6b7280' },
-      colorScheme2: { do: '#d8b4fe', decide: '#bbf7d0', delegate: '#fed7aa', delete: '#bfdbfe' },
-      colorScheme3: { do: '#99f6e4', decide: '#fbcfe8', delegate: '#fde68a', delete: '#c7d2fe' },
-    };
     const q = task.eisenhowerQuadrant as 'do' | 'decide' | 'delegate' | 'delete' | undefined;
     if (!q) return '#ffffff';
-    const map = schemes[scheme] || schemes.colorScheme1;
+    const map = EISENHOWER_SCHEMES[scheme] || EISENHOWER_SCHEMES.colorScheme1;
     return map[q] || '#e5e7eb';
   }, [settings?.eisenhowerColorScheme, task.eisenhowerQuadrant]);
 
-  // Helper to get color for any quadrant (used in popover options)
   const getFlagColor = useCallback((q?: 'do' | 'decide' | 'delegate' | 'delete') => {
     const scheme = settings?.eisenhowerColorScheme || 'colorScheme1';
-    const schemes: Record<string, Record<'do' | 'decide' | 'delegate' | 'delete', string>> = {
-      colorScheme1: { do: '#ef4444', decide: '#3b82f6', delegate: '#f59e42', delete: '#6b7280' },
-      colorScheme2: { do: '#d8b4fe', decide: '#bbf7d0', delegate: '#fed7aa', delete: '#bfdbfe' },
-      colorScheme3: { do: '#99f6e4', decide: '#fbcfe8', delegate: '#fde68a', delete: '#c7d2fe' },
-    };
     if (!q) return '#e5e7eb';
-    const map = schemes[scheme] || schemes.colorScheme1;
+    const map = EISENHOWER_SCHEMES[scheme] || EISENHOWER_SCHEMES.colorScheme1;
     return map[q] || '#e5e7eb';
   }, [settings?.eisenhowerColorScheme]);
 
@@ -851,19 +856,23 @@ export function TaskDetailsDialog({
   const parsedStartDate = useMemo(() => safeParseDate(task.startDate), [task.startDate]);
   const isValidStartDate = !!parsedStartDate;
 
-  const defaultColumns: QuoteColumn[] = [
+  const defaultColumns = useMemo<QuoteColumn[]>(() => [
     { id: 'description', name: T.description, type: 'text' },
     { id: 'unitPrice', name: `${T.unitPrice} (${settings.currency})`, type: 'number', calculation: { type: 'sum' } },
-  ];
+  ], [T.description, T.unitPrice, settings.currency]);
 
   const category = useMemo(() => (categories || []).find(c => c.id === task.categoryId), [task.categoryId, categories]);
 
   // Get all collaborator quotes for this task
   const taskCollaboratorQuotes = useMemo(() => {
     if (!collaboratorQuotes || !task.collaboratorQuotes) return [];
-    return task.collaboratorQuotes.map(cq =>
-      collaboratorQuotes.find(q => q.id === cq.quoteId)
-    ).filter(Boolean) as Quote[];
+    return task.collaboratorQuotes
+      .map(cq => {
+        const q = collaboratorQuotes.find(x => x.id === cq.quoteId);
+        if (!q) return null;
+        return { quote: q, collaboratorId: cq.collaboratorId };
+      })
+      .filter(Boolean) as { quote: Quote; collaboratorId: string }[];
   }, [collaboratorQuotes, task.collaboratorQuotes]);
 
   // Get all assigned collaborators
@@ -873,11 +882,6 @@ export function TaskDetailsDialog({
     const uniqueCollaboratorIds = [...new Set(task.collaboratorIds)];
     return uniqueCollaboratorIds.map(id => collaborators.find(c => c.id === id)).filter(Boolean) as Collaborator[];
   }, [task.collaboratorIds, collaborators]);
-
-  const assignedCollaborator = useMemo(() => {
-    if (assignedCollaborators.length > 0) return assignedCollaborators;
-    return null;
-  }, [assignedCollaborators]);
 
   // Helper function to calculate row value with formula support
   const calculateRowValue = useCallback((item: QuoteItem, column: QuoteColumn, allColumns: QuoteColumn[]) => {
@@ -929,15 +933,15 @@ export function TaskDetailsDialog({
   const totalCollabQuote = useMemo(() => {
     if (!taskCollaboratorQuotes || taskCollaboratorQuotes.length === 0) return 0;
 
-    return taskCollaboratorQuotes.reduce((totalAcc, collabQuote) => {
+    return taskCollaboratorQuotes.reduce((totalAcc, { quote: collabQuote }) => {
       if (!collabQuote?.sections) return totalAcc;
 
-      const unitPriceCol = (collabQuote.columns || defaultColumns).find((col: any) => col.id === 'unitPrice');
+      const unitPriceCol = (collabQuote.columns || defaultColumns).find(c => c.id === 'unitPrice');
       if (!unitPriceCol) return totalAcc;
 
-      const quoteTotal = collabQuote.sections.reduce((acc: any, section: any) => {
-        return acc + (section.items?.reduce((itemAcc: any, item: any) => {
-          return itemAcc + calculateRowValue(item, unitPriceCol, collabQuote.columns || defaultColumns);
+      const quoteTotal = collabQuote.sections.reduce((sectionAcc, section) => {
+        return sectionAcc + (section.items?.reduce((itemAcc, item) => {
+          return itemAcc + calculateRowValue(item, unitPriceCol, (collabQuote.columns || defaultColumns));
         }, 0) || 0);
       }, 0);
 
@@ -1071,7 +1075,7 @@ export function TaskDetailsDialog({
     }> = [];
 
     // Aggregate calculations across all collaborator quotes
-    taskCollaboratorQuotes.forEach((collabQuote) => {
+    taskCollaboratorQuotes.forEach(({ quote: collabQuote }) => {
       if (!collabQuote?.sections) return;
 
       (collabQuote.columns || defaultColumns).filter((col: any) =>
@@ -1122,9 +1126,8 @@ export function TaskDetailsDialog({
             return;
         }
 
-        // Only add unique column results (avoid duplicates across collaborator quotes)
-        const existingResult = results.find(r => r.id === col.id);
-        if (!existingResult) {
+        const existingIndex = results.findIndex(r => r.id === col.id);
+        if (existingIndex === -1) {
           results.push({
             id: col.id,
             name: col.name,
@@ -1133,16 +1136,35 @@ export function TaskDetailsDialog({
             type: calcType
           });
         } else {
-          // If it's a sum, add to existing result
-          if (calcType === 'sum' && typeof existingResult.result === 'number' && typeof result === 'number') {
-            existingResult.result += result;
+          const existing = results[existingIndex];
+          if (typeof existing.result === 'number' && typeof result === 'number') {
+            let merged: number;
+            switch (calcType) {
+              case 'sum':
+                merged = existing.result + result;
+                break;
+              case 'min':
+                merged = Math.min(existing.result, result);
+                break;
+              case 'max':
+                merged = Math.max(existing.result, result);
+                break;
+              case 'average':
+                // Average of averages — approximate; store running sum for later
+                merged = (existing.result + result) / 2;
+                break;
+              default:
+                merged = existing.result;
+            }
+            // Replace immutably
+            results[existingIndex] = { ...existing, result: merged };
           }
         }
       });
     });
 
     return results;
-  }, [taskCollaboratorQuotes, defaultColumns, calculateRowValue, T]);
+  }, [taskCollaboratorQuotes, defaultColumns, calculateRowValue]);
 
   // Share button state
   const [shareOpen, setShareOpen] = useState(false);
@@ -1315,7 +1337,9 @@ export function TaskDetailsDialog({
       await exportProjectReportToPdf({
         task,
         quote: includeQuote ? (localQuote as any) : undefined,
-        milestones: includeTimeline ? (task.milestones || getMilestonesFromQuote(localQuote)) : [],
+        milestones: includeTimeline
+          ? (localQuote ? getMilestonesFromQuote(localQuote) : (task.milestones || []))
+          : [],
         settings,
         clients,
         categories,
@@ -1479,7 +1503,7 @@ export function TaskDetailsDialog({
   }, [toast, T, settings, defaultColumns]);
 
   const copyQuoteAsImage = useCallback(async (quoteToCopy: Quote | undefined) => {
-    if (!quoteToCopy || !quote || !task) return;
+    if (!quoteToCopy || !task) return;
     try {
       toast({ title: T.exportPreparing || 'Preparing image...' });
       await exportQuoteImageToClipboard({
@@ -1500,7 +1524,7 @@ export function TaskDetailsDialog({
       console.error('Export image failed', err);
       toast({ variant: 'destructive', title: T.exportFailed || 'Export failed', description: err?.message || String(err) });
     }
-  }, [task, settings, toast, T, clients, categories, defaultColumns, calculationResults, calculateRowValue, totalQuote, quote, hideTimelineForExport]);
+  }, [task, settings, toast, T, clients, categories, defaultColumns, calculationResults, calculateRowValue, displayedGrandTotal, localQuote, hideTimelineForExport]);
 
   // Local: open Edit Quote dialog (edit-only mode) from Price tab
   const [isPriceEditOpen, setIsPriceEditOpen] = useState(false);
@@ -1509,12 +1533,12 @@ export function TaskDetailsDialog({
   const [editingCollabQuoteId, setEditingCollabQuoteId] = useState<string | null>(null);
 
   const renderQuoteTable = (title: string, quoteData: Quote | undefined, onEdit?: () => void) => {
-    if (!quoteData) return null; // Add this check
+    if (!quoteData) return null;
     return (
       <div>
         <div className="flex items-center justify-between mb-2">
           <h4 className="font-semibold">{title}</h4>
-          {quoteData && (
+          {(
             <div className="flex items-center gap-2">
               <CalculatorDialog settings={settings} />
               <Button
@@ -1878,20 +1902,22 @@ export function TaskDetailsDialog({
                   {/* Progress bar */}
                   {isValidDeadline && isValidStartDate && (
                     <div className="space-y-2">
-                      <Progress
-                        value={Math.max(0, Math.min(100,
-                          (differenceInDays(new Date(), parsedStartDate) /
-                            differenceInDays(parsedDeadline, parsedStartDate)) * 100
-                        ))}
-                        className="h-2"
-                      />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{T.progress ?? 'Progress'}</span>
-                        <span>
-                          {Math.max(0, differenceInDays(new Date(), parsedStartDate))} / {" "}
-                          {differenceInDays(parsedDeadline, parsedStartDate)} {T.days ?? 'days'}
-                        </span>
-                      </div>
+                      {(() => {
+                        const totalDays = differenceInDays(parsedDeadline, parsedStartDate);
+                        const elapsedDays = Math.max(0, differenceInDays(new Date(), parsedStartDate));
+                        const progressValue = totalDays <= 0 ? 100 : Math.max(0, Math.min(100, (elapsedDays / totalDays) * 100));
+                        return (
+                          <>
+                            <Progress value={progressValue} className="h-2" />
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>{T.progress ?? 'Progress'}</span>
+                              <span>
+                                {elapsedDays} / {Math.max(0, totalDays)} {T.days ?? 'days'}
+                              </span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -2025,8 +2051,7 @@ export function TaskDetailsDialog({
             <div className="space-y-4">
               {taskCollaboratorQuotes.length > 0 ? (
                 <>
-                  {taskCollaboratorQuotes.map((collabQuote, index) => {
-                    const collaboratorId = task.collaboratorQuotes?.[index]?.collaboratorId;
+                  {taskCollaboratorQuotes.map(({ quote: collabQuote, collaboratorId }, index) => {
                     const collaborator = collaborators.find(c => c.id === collaboratorId);
 
                     return (
@@ -2060,7 +2085,7 @@ export function TaskDetailsDialog({
                             quote={collabQuote}
                             settings={settings}
                             onUpdateQuote={stableUpdateQuoteHandler}
-                            visibilityState={{}} // not used in editOnly
+                            visibilityState={{}}
                             onVisibilityChange={(_s) => { }}
                             mode="editOnly"
                           />

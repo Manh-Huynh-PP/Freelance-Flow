@@ -45,6 +45,61 @@ import { vi, en } from "@/lib/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { safeEval } from "@/lib/helpers/formula-parser";
 
+// Helper function to securely evaluate row formulas and prevent code duplication
+const evaluateRowFormula = (item: any, columns: QuoteColumn[], formula: string, skipColumnId?: string): number => {
+  if (!formula) return 0;
+  try {
+    const rowVals: Record<string, number> = {};
+    columns.forEach(c => {
+      if (c.type === 'number' && c.id !== skipColumnId) {
+        const val = c.id === 'unitPrice'
+          ? Number(item.unitPrice) || 0
+          : Number(item.customFields?.[c.id]) || 0;
+        rowVals[c.id] = val;
+      }
+    });
+
+    let expr = formula;
+    Object.entries(rowVals).forEach(([cid, val]) => {
+      expr = expr.replaceAll(cid, val.toString());
+    });
+
+    const result = safeEval(expr);
+    return !isNaN(result) ? Number(result) : 0;
+  } catch {
+    return 0; // Default to 0 if formula fails
+  }
+};
+
+// Helper function to get default values for quote columns
+const getDefaultColumnValue = (colType: 'text' | 'number' | 'date'): any => {
+  if (colType === 'number') return 0;
+  if (colType === 'date') return null;
+  return '';
+};
+
+// Helper function to process and cast column values
+const processColumnValue = (val: any, colType: 'text' | 'number' | 'date'): any => {
+  if (colType === 'number') {
+    if (typeof val === 'string' && val.trim() !== '') {
+      let cleanNumber = val.replace(/\./g, '').replace(/,/g, '.');
+      let parsed = parseFloat(cleanNumber);
+      if (isNaN(parsed)) {
+        cleanNumber = val.replace(/,/g, '');
+        parsed = parseFloat(cleanNumber);
+      }
+      return isNaN(parsed) ? 0 : parsed;
+    } else {
+      return Number(val) || 0;
+    }
+  } else if (colType === 'date') {
+    const dateValue = new Date(val);
+    return !isNaN(dateValue.getTime()) ? dateValue.toISOString().split('T')[0] : val;
+  } else {
+    return val !== undefined ? val : '';
+  }
+};
+
 // Helper function to create valid timeline data for new items
 const createInitialTimelineData = (startDate?: Date, endDate?: Date, itemIndex = 0, totalItems = 1) => {
   const defaultStart = startDate || new Date();
@@ -112,7 +167,16 @@ export const QuoteManager = ({
 
   const [templateToApply, setTemplateToApply] = React.useState<QuoteTemplate | null>(null);
   const [activeTab, setActiveTab] = React.useState("sections");
+  const undoTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const [isSuggestDialogOpen, setIsSuggestDialogOpen] = React.useState(false);
+
+  // Undo state for paste operations
+  const [undoBackup, setUndoBackup] = React.useState<{
+    columns: QuoteColumn[];
+    sections: any[];
+    sectionIndex: number;
+    timeoutId?: NodeJS.Timeout;
+  } | null>(null);
 
   // Paste options state
   const [pendingPasteData, setPendingPasteData] = React.useState<{
@@ -123,13 +187,6 @@ export const QuoteManager = ({
   } | null>(null);
   const [isPasteOptionsDialogOpen, setIsPasteOptionsDialogOpen] = React.useState(false);
 
-  // Undo state for paste operations
-  const [undoBackup, setUndoBackup] = React.useState<{
-    columns: QuoteColumn[];
-    sections: any[];
-    sectionIndex: number;
-    timeoutId?: NodeJS.Timeout;
-  } | null>(null);
 
   const { fields: sectionFields, append: appendSection, remove: removeSection } = useFieldArray({
     control,
@@ -170,30 +227,7 @@ export const QuoteManager = ({
         (section.items || []).map((item: any) => {
           // Check if this column has rowFormula
           if (col.rowFormula) {
-            try {
-              // Calculate value based on rowFormula and current row values
-              const rowVals: Record<string, number> = {};
-              columns.forEach(c => {
-                if (c.type === 'number' && c.id !== col.id) {
-                  // unitPrice is stored at item level, custom columns in customFields
-                  const val = c.id === 'unitPrice'
-                    ? Number(item.unitPrice) || 0
-                    : Number(item.customFields?.[c.id]) || 0;
-                  rowVals[c.id] = val;
-                }
-              });
-
-              // Replace column IDs in formula with actual values
-              let expr = col.rowFormula;
-              Object.entries(rowVals).forEach(([cid, val]) => {
-                expr = expr.replaceAll(cid, val.toString());
-              });
-
-              const result = safeEval(expr);
-              return !isNaN(result) ? Number(result) : 0;
-            } catch {
-              return 0; // Default to 0 if formula fails
-            }
+            return evaluateRowFormula(item, columns, col.rowFormula, col.id);
           } else {
             // Use normal value if no formula
             if (col.id === 'unitPrice') return Number(item.unitPrice) || 0;
@@ -283,30 +317,7 @@ export const QuoteManager = ({
 
         // Check if unitPrice column has a row formula
         if (priceColumn.rowFormula) {
-          try {
-            // Calculate value based on rowFormula and current row values
-            const rowVals: Record<string, number> = {};
-            columns.forEach(c => {
-              if (c.type === 'number' && c.id !== priceColumn.id) {
-                // unitPrice is stored at item level, custom columns in customFields
-                const val = c.id === 'unitPrice'
-                  ? Number(item.unitPrice) || 0
-                  : Number(item.customFields?.[c.id]) || 0;
-                rowVals[c.id] = val;
-              }
-            });
-
-            // Replace column IDs in formula with actual values
-            let expr = priceColumn.rowFormula;
-            Object.entries(rowVals).forEach(([cid, val]) => {
-              expr = expr.replaceAll(cid, val.toString());
-            });
-
-            const result = safeEval(expr);
-            value = !isNaN(result) ? Number(result) : 0;
-          } catch {
-            value = 0; // Default to 0 if formula fails
-          }
+          value = evaluateRowFormula(item, columns, priceColumn.rowFormula, priceColumn.id);
         } else {
           // Use normal unitPrice value if no formula
           value = Number(item.unitPrice) || 0;
@@ -334,24 +345,8 @@ export const QuoteManager = ({
             if (fieldArrayName === 'collaboratorSections') {
               const unitPriceCol = columns.find(col => col.id === 'unitPrice');
               if (unitPriceCol?.rowFormula) {
-                try {
-                  const rowVals: Record<string, number> = {};
-                  columns.forEach(c => {
-                    if (c.type === 'number' && c.id !== 'unitPrice') {
-                      // Custom columns only since we already check c.id !== 'unitPrice'
-                      const val = Number(item.customFields?.[c.id]) || 0;
-                      rowVals[c.id] = val;
-                    }
-                  });
-                  let expr = unitPriceCol.rowFormula;
-                  Object.entries(rowVals).forEach(([cid, val]) => {
-                    expr = expr.replaceAll(cid, val.toString());
-                  });
-                  const result = safeEval(expr);
-                  return itemAcc + (!isNaN(result) ? Number(result) : 0);
-                } catch {
-                  return itemAcc + (Number(item.unitPrice) || 0);
-                }
+                const evalResult = evaluateRowFormula(item, columns, unitPriceCol.rowFormula, 'unitPrice');
+                return itemAcc + evalResult;
               }
             }
             return itemAcc + (Number(item.unitPrice) || 0);
@@ -380,31 +375,42 @@ export const QuoteManager = ({
         // Auto-add + between adjacent variables (e.g., {QuantitySum}{PriceAvg} becomes {QuantitySum}+{PriceAvg})
         formula = formula.replace(/(\})\s*(\{)/g, '}+{');
 
-        // Support old system variables for backward compatibility only
-        formula = formula
-          .replace(/\{Price\}/g, priceSum.toString())
-          .replace(/\{Collab\}/g, collabSum.toString())
-          .replace(/\{P\}/g, priceSum.toString())
-          .replace(/\{C\}/g, collabSum.toString())
-          .replace(/\{\s*priceSum\s*\}/g, priceSum.toString())
-          .replace(/\{\s*collabSum\s*\}/g, collabSum.toString());
+        // Create a dictionary of all possible variable replacements
+        // Key is the exact placeholder string, value is the numeric result
+        const replacements: Record<string, string> = {
+          '{Price}': priceSum.toString(),
+          '{Collab}': collabSum.toString(),
+          '{P}': priceSum.toString(),
+          '{C}': collabSum.toString(),
+          '{priceSum}': priceSum.toString(),
+          '{collabSum}': collabSum.toString(),
+        };
 
-        // Support column calculation results using column names
+        // Add calculated column results to the dictionary
         calculationResults.forEach((calc, index) => {
-          const value = typeof calc.result === 'number' ? calc.result : 0;
+          const value = (typeof calc.result === 'number' ? calc.result : 0).toString();
           const varName = calc.name.replace(/\s+/g, '');
-          // Use clean variable names without suffix
-          formula = formula.replaceAll(`{${varName}}`, value.toString());
-          // Also support old formats for backward compatibility
-          formula = formula.replaceAll(`{${varName}Calc}`, value.toString());
-          formula = formula.replaceAll(`{${String.fromCharCode(65 + index)}}`, value.toString());
-          formula = formula.replaceAll(`{${calc.id}}`, value.toString());
+
+          replacements[`{${varName}}`] = value;
+          replacements[`{${varName}Calc}`] = value;
+          replacements[`{${String.fromCharCode(65 + index)}}`] = value;
+          replacements[`{${calc.id}}`] = value;
         });
 
-        // Note: Column totals without calculations are no longer supported
-        // Only calculation results and system variables (Price, Collab) are available
+        // Use a single-pass replacement strategy to avoid collisions
+        // (e.g., replacing {Sum} shouldn't affect {SumTotal})
+        // Sort keys by length descending to match longest placeholders first
+        const sortedKeys = Object.keys(replacements).sort((a, b) => b.length - a.length);
 
-        const result = safeEval(formula);
+        // Escape helper for regex
+        const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // Replace each found placeholder with its value from the dictionary
+        let processedFormula = formula;
+        const pattern = new RegExp(sortedKeys.map(escapeRegExp).join('|'), 'g');
+        processedFormula = processedFormula.replace(pattern, (matched) => replacements[matched]);
+
+        const result = safeEval(processedFormula);
         setGrandTotalError('');
         if (typeof result === 'number' && !isNaN(result)) return result;
         setGrandTotalError(T.invalidFormula || 'Công thức không hợp lệ hoặc không trả về số.');
@@ -550,62 +556,46 @@ export const QuoteManager = ({
   const handleUndoPaste = React.useCallback(() => {
     console.log('handleUndoPaste called, checking current undoBackup...');
 
-    // Use setTimeout to avoid setState during render
-    setTimeout(() => {
-      // Get current undoBackup state directly from setUndoBackup
-      setUndoBackup(currentBackup => {
-        console.log('Current undoBackup in callback:', currentBackup);
-
-        if (!currentBackup) {
-          console.log('No undo backup available');
-          toast({
-            title: T.undoAction || "Không có hoàn tác",
-            description: T.undoAction || "Không có thao tác gần đây để hoàn tác",
-            variant: "destructive"
-          });
-          return currentBackup; // Return unchanged
-        }
-
-        try {
-          // Clear the timeout if it exists
-          if (currentBackup.timeoutId) {
-            clearTimeout(currentBackup.timeoutId);
-          }
-
-          console.log('Restoring backup columns:', currentBackup.columns);
-          console.log('Restoring backup sections:', currentBackup.sections);
-
-          // Restore columns first
-          setColumns(currentBackup.columns);
-
-          // Restore sections with complete data structure
-          // Use setTimeout to ensure columns are set before sections
-          setTimeout(() => {
-            form.setValue(fieldArrayName, currentBackup.sections);
-            console.log('Sections restored successfully');
-          }, 10);
-
-          toast({
-            title: T.undoSuccess || "Hoàn tác thành công",
-            description: T.undoSuccessDesc || "Đã khôi phục trạng thái trước khi dán"
-          });
-
-          console.log('Undo completed successfully');
-
-          // Return null to clear the backup
-          return null;
-        } catch (error) {
-          console.error('Undo failed:', error);
-          toast({
-            variant: 'destructive',
-            title: T.undoFailed || "Hoàn tác thất bại",
-            description: T.undoFailedDesc || "Không thể khôi phục trạng thái trước đó"
-          });
-          return currentBackup; // Return unchanged on error
-        }
+    if (!undoBackup) {
+      console.log('No undo backup available');
+      toast({
+        title: T.undoAction || "Không có hoàn tác",
+        description: T.undoAction || "Không có thao tác gần đây để hoàn tác",
+        variant: "destructive"
       });
-    }, 0); // Execute on next tick
-  }, [setColumns, form, fieldArrayName, toast, T]);
+      return;
+    }
+
+    try {
+      // Clear the timeout if it exists
+      if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+        undoTimeoutRef.current = null;
+      }
+
+      console.log('Restoring backup columns and sections');
+
+      // Restore columns and sections together
+      // React will batch these updates
+      setColumns(undoBackup.columns);
+      form.setValue(fieldArrayName, undoBackup.sections);
+
+      toast({
+        title: T.undoSuccess || "Hoàn tác thành công",
+        description: T.undoSuccessDesc || "Đã khôi phục trạng thái trước khi dán"
+      });
+
+      // Clear the backup after successful restoration
+      setUndoBackup(null);
+    } catch (error) {
+      console.error('Undo failed:', error);
+      toast({
+        variant: 'destructive',
+        title: T.undoFailed || "Hoàn tác thất bại",
+        description: T.undoFailedDesc || "Không thể khôi phục trạng thái trước đó"
+      });
+    }
+  }, [undoBackup, setColumns, form, fieldArrayName, toast, T]);
 
   // Helper function for better header detection
   const detectHeaders = React.useCallback((firstRow: string[], allRows: string[][]) => {
@@ -923,7 +913,7 @@ export const QuoteManager = ({
               let val = item.customFields?.[originalCol.id];
               newItem.customFields[finalCol.id] = processColumnValue(val, finalCol.type);
             } else {
-              newItem.customFields[finalCol.id] = getDefaultValue(finalCol.type);
+              newItem.customFields[finalCol.id] = getDefaultColumnValue(finalCol.type);
             }
           }
 
@@ -942,7 +932,7 @@ export const QuoteManager = ({
           // Initialize all existing columns with default values first
           finalColumns.slice(1).forEach(finalCol => {
             if (finalCol.id !== 'timeline') { // Don't overwrite timeline
-              newItem.customFields[finalCol.id] = getDefaultValue(finalCol.type);
+              newItem.customFields[finalCol.id] = getDefaultColumnValue(finalCol.type);
             }
           });
 
@@ -991,41 +981,12 @@ export const QuoteManager = ({
               let val = item.customFields?.[originalCol.id];
               newItem.customFields[finalCol.id] = processColumnValue(val, finalCol.type);
             } else {
-              newItem.customFields[finalCol.id] = getDefaultValue(finalCol.type);
+              newItem.customFields[finalCol.id] = getDefaultColumnValue(finalCol.type);
             }
           });
 
           return newItem;
         });
-      }
-
-      // Helper function to process column values
-      function processColumnValue(val: any, colType: 'text' | 'number' | 'date'): any {
-        if (colType === 'number') {
-          if (typeof val === 'string' && val.trim() !== '') {
-            let cleanNumber = val.replace(/\./g, '').replace(/,/g, '.');
-            let parsed = parseFloat(cleanNumber);
-            if (isNaN(parsed)) {
-              cleanNumber = val.replace(/,/g, '');
-              parsed = parseFloat(cleanNumber);
-            }
-            return isNaN(parsed) ? 0 : parsed;
-          } else {
-            return Number(val) || 0;
-          }
-        } else if (colType === 'date') {
-          const dateValue = new Date(val);
-          return !isNaN(dateValue.getTime()) ? dateValue.toISOString().split('T')[0] : val;
-        } else {
-          return val !== undefined ? val : '';
-        }
-      }
-
-      // Helper function to get default values
-      function getDefaultValue(colType: 'text' | 'number' | 'date'): any {
-        if (colType === 'number') return 0;
-        if (colType === 'date') return null;
-        return '';
       }
 
       // Map items to current column structure
@@ -1077,7 +1038,7 @@ export const QuoteManager = ({
             const updatedItem = { ...existingItem };
             if (!updatedItem.customFields) updatedItem.customFields = {};
             columnsToAdd.forEach(newCol => {
-              updatedItem.customFields[newCol.id] = getDefaultValue(newCol.type);
+              updatedItem.customFields[newCol.id] = getDefaultColumnValue(newCol.type);
             });
             return updatedItem;
           });
@@ -1100,7 +1061,7 @@ export const QuoteManager = ({
                   itemWithAllCols.customFields[col.id] = newItem.customFields[col.id];
                 } else {
                   // Use default value for columns not in new data
-                  itemWithAllCols.customFields[col.id] = getDefaultValue(col.type);
+                  itemWithAllCols.customFields[col.id] = getDefaultColumnValue(col.type);
                 }
               });
 
@@ -1138,31 +1099,18 @@ export const QuoteManager = ({
       }
 
       // Save backup for undo functionality BEFORE creating toast
-      const timeoutId = setTimeout(() => {
-        setUndoBackup(prev => {
-          // Only clear if this is still the same backup
-          if (prev && prev.timeoutId === timeoutId) {
-            console.log('Undo backup expired, clearing...');
-            return null;
-          }
-          return prev;
-        });
-      }, 30000); // Increase to 30 seconds
+      // Clear existing timeout if any
+      if (undoTimeoutRef.current) {
+        clearTimeout(undoTimeoutRef.current);
+      }
 
-      console.log('Creating undo backup with data:', {
-        columnsCount: backup.columns.length,
-        sectionsCount: backup.sections.length,
-        sampleSection: backup.sections[0] ? {
-          name: backup.sections[0].name,
-          itemsCount: backup.sections[0].items?.length,
-          sampleItem: backup.sections[0].items?.[0]
-        } : 'No sections'
-      });
+      undoTimeoutRef.current = setTimeout(() => {
+        setUndoBackup(null);
+        undoTimeoutRef.current = null;
+        console.log('Undo backup expired, clearing...');
+      }, 30000); // 30 seconds
 
-      setUndoBackup({
-        ...backup,
-        timeoutId
-      });
+      setUndoBackup(backup);
 
       // Create toast AFTER setting undo backup
       console.log('Creating toast with undo action...');
