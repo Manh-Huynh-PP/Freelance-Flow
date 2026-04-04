@@ -35,6 +35,7 @@ import { i18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { computeQuoteTotalWithFormula } from "@/ai/analytics/business-intelligence-helpers";
 
 type ClientManagerProps = {
   clients: Client[];
@@ -261,37 +262,79 @@ function ViewClientDialog({
   language: 'en' | 'vi',
   currency: 'VND' | 'USD'
 }) {
-    if (!client) return null;
     const T = i18n[language];
     const { toast } = useToast();
 
-    const clientTasks = tasks.filter(t => t.clientId === client.id);
+    const clientTasks = React.useMemo(() => {
+        if (!client) return [];
+        return tasks.filter(t => t.clientId === client.id);
+    }, [tasks, client?.id]);
     
-    // Financial stats
-    let totalIncome = 0;
-    let totalCosts = 0;
-    let receivedAmount = 0;
+    // Financial stats - Wrapped in useMemo to stabilize render for React 19/Next 16
+    const { totalIncome, totalCosts, receivedAmount } = React.useMemo(() => {
+        if (!client) return { totalIncome: 0, totalCosts: 0, receivedAmount: 0 };
+        let income = 0;
+        let costs = 0;
+        let received = 0;
 
-    clientTasks.forEach(task => {
-        // Income from main quote
-        if (task.quoteId) {
-            const quote = quotes.find(q => q.id === task.quoteId);
-            if (quote) {
-                totalIncome += quote.total || 0;
-                receivedAmount += quote.amountPaid || 0;
-            }
-        }
+        clientTasks.forEach(task => {
+            // Loại bỏ các task onhold hoặc archive khỏi tính toán (giống logic BI)
+            if (task.status === 'onhold' || task.status === 'archived' || (task.status as string) === 'archive') return;
 
-        // Costs from collaborator quotes
-        if (task.collaboratorQuotes && Array.isArray(task.collaboratorQuotes)) {
-            task.collaboratorQuotes.forEach(cqMapping => {
-                const cq = collaboratorQuotes.find(q => q.id === cqMapping.quoteId);
-                if (cq) {
-                    totalCosts += cq.total || 0;
+            let taskReceived = 0;
+            let taskTotal = 0;
+            
+            // Income from main quote
+            if (task.quoteId) {
+                const quote = quotes.find(q => q.id === task.quoteId);
+                if (quote) {
+                    // Sử dụng helper tính tổng báo giá (có hỗ trợ công thức) - Logic đồng nhất với Business Analytics
+                    taskTotal = computeQuoteTotalWithFormula(quote);
+                    
+                    // Tính số tiền thực nhận từ các đợt thanh toán (logic chuẩn từ BI helpers)
+                    const payments = (quote as any).payments as any[] | undefined;
+                    if (Array.isArray(payments) && payments.length > 0) {
+                        taskReceived = payments.reduce((s, p) => {
+                            if (!p || p.status !== 'paid') return s;
+                            if (String(p.amountType || '') === 'percent') {
+                                const pct = Math.max(0, Math.min(100, Number(p.percent || 0)));
+                                return s + (taskTotal * pct / 100);
+                            }
+                            const amt = Number(p.amount || 0);
+                            return s + (amt > 0 ? amt : 0);
+                        }, 0);
+                    } else {
+                        taskReceived = quote.amountPaid || 0;
+                    }
+
+                    // Thực nhận (Received Amount): Cộng dồn tất cả các khoản đã thanh toán
+                    received += taskReceived;
+
+                    // Tổng doanh thu (Total Revenue): Quy tắc mới - Chỉ tính task "Done" và "Thanh toán 100%"
+                    const isPaidFull = taskReceived >= (taskTotal - 0.01); // Sai số nhỏ
+                    if (task.status === 'done' && isPaidFull) {
+                        income += taskTotal;
+                    }
                 }
-            });
-        }
-    });
+            }
+
+            // Costs from collaborator quotes
+            if (task.collaboratorQuotes && Array.isArray(task.collaboratorQuotes)) {
+                task.collaboratorQuotes.forEach(cqMapping => {
+                    const cq = collaboratorQuotes.find(q => q.id === cqMapping.quoteId);
+                    if (cq) {
+                        // Ưu tiên số tiền đã trả cho CTV, fallback về tổng quote (giống BI helpers)
+                        const total = (cq as any).total || 0;
+                        costs += typeof (cq as any).amountPaid === 'number' ? (cq as any).amountPaid : total;
+                    }
+                });
+            }
+        });
+
+        return { totalIncome: income, totalCosts: costs, receivedAmount: received };
+    }, [clientTasks, quotes, collaboratorQuotes, client?.id]);
+
+    if (!client) return null;
 
     const netProfit = totalIncome - totalCosts;
 
@@ -314,7 +357,7 @@ function ViewClientDialog({
             const quote = quotes.find(q => q.id === task.quoteId);
             const statusTranslated = T.statuses[task.status as keyof typeof T.statuses] || task.status;
             const deadlineFormatted = task.deadline ? new Date(task.deadline).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : '-';
-            const value = quote?.total || 0;
+            const value = computeQuoteTotalWithFormula(quote);
             
             tasksTable += `${task.name}\t${statusTranslated}\t${deadlineFormatted}\t${value}\n`;
         });
@@ -458,7 +501,7 @@ function ViewClientDialog({
                                                             </Badge>
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono text-xs">
-                                                            {quote ? formatCurrency(quote.total) : '-'}
+                                                             {quote ? formatCurrency(computeQuoteTotalWithFormula(quote)) : '-'}
                                                         </TableCell>
                                                         <TableCell>
                                                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
