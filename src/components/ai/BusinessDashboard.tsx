@@ -292,72 +292,18 @@ export function BusinessDashboard() {
   };
 
   const handleTaskFormSubmit = (values: any, quoteColumns: any, collaboratorQuoteColumns: any, taskId: string) => {
-    const taskUpdates = {
-      id: taskId,
-      name: values.name,
-      description: values.description,
-      briefLink: values.briefLink,
-      driveLink: values.driveLink,
-      clientId: values.clientId,
-      collaboratorIds: values.collaboratorIds,
-      categoryId: values.categoryId,
-      status: values.status,
-      subStatusId: values.subStatusId,
-      startDate: values.dates.from,
-      deadline: values.dates.to,
-      updatedAt: new Date().toISOString()
-    };
-    updateTask(taskUpdates);
-
-    if (selectedQuote && values.sections) {
-      updateQuote(selectedQuote.id, {
-        sections: values.sections,
-        columns: quoteColumns
-      });
-    }
-
-    // Update existing collaborator quotes and create new ones if needed
-    if (values.collaboratorQuotes && Array.isArray(values.collaboratorQuotes)) {
-      const currentTask = appData?.tasks?.find((t: Task) => t.id === taskId);
-      const currentMappings = currentTask?.collaboratorQuotes || [];
-      const mappingByCollabId = new Map(currentMappings.map((m: any) => [m.collaboratorId, m.quoteId]));
-
-      values.collaboratorQuotes.forEach((collabQuote: any, index: number) => {
-        const mappedQuoteId = mappingByCollabId.get(collabQuote.collaboratorId);
-        const existingQuote = mappedQuoteId
-          ? appData?.collaboratorQuotes?.find((cq: any) => cq.id === mappedQuoteId)
-          : selectedCollaboratorQuotes?.[index];
-        if (existingQuote) {
-          updateCollaboratorQuote(existingQuote.id, {
-            sections: collabQuote.sections,
-            columns: collaboratorQuoteColumns,
-            collaboratorId: collabQuote.collaboratorId
-          });
-        } else if (collabQuote.collaboratorId && collabQuote.sections && collabQuote.sections.length > 0) {
-          // Create new collaborator quote entity and map it to task
-          const newId = `collab-quote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const total = collabQuote.sections.reduce((acc: number, s: any) => acc + (s.items || []).reduce((ai: number, it: any) => ai + (Number(it.unitPrice || 0) * (it.quantity || 1)), 0), 0);
-          const newCQ = {
-            id: newId,
-            collaboratorId: collabQuote.collaboratorId,
-            sections: collabQuote.sections,
-            total,
-            columns: collaboratorQuoteColumns,
-            paymentStatus: 'pending'
-          } as any;
-          // Push into global store
-          setAppData((prev: any) => ({
-            ...prev,
-            collaboratorQuotes: [...(prev.collaboratorQuotes || []), newCQ],
-            tasks: (prev.tasks || []).map((t: Task) => t.id === taskId ? {
-              ...t,
-              collaboratorQuotes: [...(t.collaboratorQuotes || []), { collaboratorId: collabQuote.collaboratorId, quoteId: newId }],
-              collaboratorIds: Array.from(new Set([...(t.collaboratorIds || []), collabQuote.collaboratorId]))
-            } : t)
-          }));
-        }
-      });
-    }
+    // Use unified editTask from context to handle task, project, and all quote updates atomically
+    editTask(
+      {
+        ...values,
+        id: taskId,
+        updatedAt: new Date().toISOString()
+      },
+      quoteColumns,
+      collaboratorQuoteColumns,
+      taskId
+    );
+    
     setIsEditDialogOpen(false);
   };
 
