@@ -10,14 +10,13 @@ import {
   TableHead,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Task, Client, Category, Quote, StatusInfo, QuoteColumn, QuoteTemplate, Collaborator, AppSettings, QuoteSection, ColumnCalculationType, QuoteItem, Milestone } from "@/lib/types";
+import type { Task, Client, Category, Quote, StatusInfo, QuoteColumn, Collaborator, AppSettings, QuoteItem, Milestone } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -64,7 +63,7 @@ import { CalculatorDialog } from "@/components/calculator-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileDown } from "lucide-react";
 import exportProjectReportToPdf from "@/lib/exports/exportProjectReportToPdf";
-import { safeEval } from "@/lib/helpers/formula-parser";
+import { useQuoteCalculations } from '@/hooks/useQuoteCalculations';
 
 
 
@@ -691,6 +690,58 @@ function LinksDisplay({
   );
 }
 
+// Helper function to extract milestones from quote timeline column (pure function)
+function getMilestonesFromQuote(quoteData?: Quote): Milestone[] {
+  if (!quoteData?.sections || !quoteData.columns?.some(col => col.id === 'timeline')) {
+    return [];
+  }
+
+  const milestones: Milestone[] = [];
+
+  quoteData.sections.forEach((section, sectionIndex) => {
+    const items = section.items || [];
+    items.forEach((item, itemIndex) => {
+      let timelineValue = item.customFields?.timeline;
+
+      // Handle both object and JSON string formats
+      if (typeof timelineValue === 'string' && timelineValue.trim() !== '') {
+        try {
+          timelineValue = JSON.parse(timelineValue);
+        } catch (e) {
+          return;
+        }
+      }
+
+      // Check if timeline data has required start and end dates
+      if (timelineValue &&
+        typeof timelineValue === 'object' &&
+        timelineValue !== null &&
+        timelineValue.start &&
+        timelineValue.end) {
+
+        const sectionIdForMilestone = section.id || `section-${sectionIndex}`;
+        const itemIdForMilestone = item.id || `item-${itemIndex}`;
+        const milestoneId = `${sectionIdForMilestone}-${itemIdForMilestone}`;
+
+        const timelineData = timelineValue as { start: string; end: string; color?: string };
+
+        const milestone: Milestone = {
+          id: milestoneId,
+          name: item.description || `${section.name || 'Section'} - Item ${itemIndex + 1}`,
+          startDate: timelineData.start,
+          endDate: timelineData.end,
+          color: timelineData.color || `hsl(${(sectionIndex * 137.5 + itemIndex * 60) % 360}, 60%, 55%)`,
+          content: `Section: ${section.name || 'Unnamed Section'}`
+        };
+
+        milestones.push(milestone);
+      }
+    });
+  });
+
+  return milestones;
+}
+
 // Eisenhower color schemes - defined outside component to avoid re-creation
 const EISENHOWER_SCHEMES: Record<string, Record<'do' | 'decide' | 'delegate' | 'delete', string>> = {
   colorScheme1: { do: '#ef4444', decide: '#3b82f6', delegate: '#f59e42', delete: '#6b7280' },
@@ -730,7 +781,6 @@ export function TaskDetailsDialog({
   const T = useMemo(() => {
     const lang = (i18n as any)[settings.language];
     if (!lang) {
-      console.warn('Language not found, falling back to vi');
       return { ...i18n.vi };
     }
     return { ...lang };
@@ -805,7 +855,9 @@ export function TaskDetailsDialog({
   const [currentStatusId, setCurrentStatusId] = useState<string>(task.status);
   React.useEffect(() => {
     setCurrentStatusId(task.status);
-  }, [task.status, isOpen]);  const eisenhowerFlagColor = useMemo(() => {
+  }, [task.status, isOpen]);
+
+  const eisenhowerFlagColor = useMemo(() => {
     const scheme = settings?.eisenhowerColorScheme || 'colorScheme1';
     const q = task.eisenhowerQuadrant as 'do' | 'decide' | 'delegate' | 'delete' | undefined;
     if (!q) return '#ffffff';
@@ -832,15 +884,15 @@ export function TaskDetailsDialog({
   const [hideTimelineForExport, setHideTimelineForExport] = useState(false);
 
   // Resolve linked project via context
+  const taskProjectId = (task as any)?.projectId;
   const project = React.useMemo(() => {
     try {
-      const pid = (task as any)?.projectId;
       const all = (dashboard as any)?.appData?.projects || [];
-      return (all as any[]).find(p => p.id === pid) || null;
+      return (all as any[]).find((p: any) => p.id === taskProjectId) || null;
     } catch {
       return null;
     }
-  }, [dashboard?.appData?.projects, (task as any)?.projectId]);
+  }, [dashboard?.appData?.projects, taskProjectId]);
   const [showAllProjectLinks, setShowAllProjectLinks] = React.useState(false);
 
   // Resolve status using user custom settings first, fallback to static STATUS_INFO
@@ -883,288 +935,15 @@ export function TaskDetailsDialog({
     return uniqueCollaboratorIds.map(id => collaborators.find(c => c.id === id)).filter(Boolean) as Collaborator[];
   }, [task.collaboratorIds, collaborators]);
 
-  // Helper function to calculate row value with formula support
-  const calculateRowValue = useCallback((item: QuoteItem, column: QuoteColumn, allColumns: QuoteColumn[]) => {
-    if (column.rowFormula) {
-      try {
-        const rowVals: Record<string, number> = {};
-        allColumns.forEach(c => {
-          if (c.type === 'number' && c.id !== column.id) {
-            const val = c.id === 'unitPrice'
-              ? Number(item.unitPrice) || 0
-              : Number(item.customFields?.[c.id]) || 0;
-            rowVals[c.id] = val;
-          }
-        });
-
-        let expr = column.rowFormula;
-        Object.entries(rowVals).forEach(([cid, val]) => {
-          expr = expr.replaceAll(cid, val.toString());
-        });
-
-        const result = safeEval(expr);
-        return !isNaN(result) ? Number(result) : 0;
-      } catch {
-        return 0;
-      }
-    } else {
-      // Use normal value if no formula
-      if (column.id === 'unitPrice') {
-        return Number(item.unitPrice) || 0;
-      } else {
-        return Number(item.customFields?.[column.id]) || 0;
-      }
-    }
-  }, []);
-
-  // Always use localQuote for payment progress and calculations
-  const totalQuote = useMemo(() => {
-    if (!localQuote?.sections) return 0;
-    const priceColumn = (localQuote.columns || defaultColumns).find(col => col.id === 'unitPrice');
-    if (!priceColumn) return 0;
-    return localQuote.sections.reduce((acc, section) => {
-      return acc + (section.items?.reduce((itemAcc, item) => {
-        return itemAcc + calculateRowValue(item, priceColumn, localQuote.columns || defaultColumns);
-      }, 0) || 0);
-    }, 0);
-  }, [localQuote, defaultColumns, calculateRowValue]);
-
-  // Calculate total for all collaborator quotes
-  const totalCollabQuote = useMemo(() => {
-    if (!taskCollaboratorQuotes || taskCollaboratorQuotes.length === 0) return 0;
-
-    return taskCollaboratorQuotes.reduce((totalAcc, { quote: collabQuote }) => {
-      if (!collabQuote?.sections) return totalAcc;
-
-      const unitPriceCol = (collabQuote.columns || defaultColumns).find(c => c.id === 'unitPrice');
-      if (!unitPriceCol) return totalAcc;
-
-      const quoteTotal = collabQuote.sections.reduce((sectionAcc, section) => {
-        return sectionAcc + (section.items?.reduce((itemAcc, item) => {
-          return itemAcc + calculateRowValue(item, unitPriceCol, (collabQuote.columns || defaultColumns));
-        }, 0) || 0);
-      }, 0);
-
-      return totalAcc + quoteTotal;
-    }, 0);
-  }, [taskCollaboratorQuotes, defaultColumns, calculateRowValue]);
-
-
-
-  // Enhanced calculation results that match QuoteManager structure
-  const calculationResults = useMemo(() => {
-    if (!localQuote?.sections) return [];
-
-    const results: Array<{
-      id: string;
-      name: string;
-      calculation: string;
-      result: number | string;
-      type: ColumnCalculationType;
-    }> = [];
-
-    // Process each column with calculations
-    (localQuote.columns || defaultColumns).filter(col =>
-      col.calculation && col.calculation.type && col.calculation.type !== 'none' && col.type === 'number'
-    ).forEach(col => {
-      if (!col.calculation) return; // Type guard
-
-      const allValues = localQuote.sections!.flatMap((section) =>
-        (section.items || []).map((item) => calculateRowValue(item, col, localQuote.columns || defaultColumns))
-          .filter((v: number) => !isNaN(v))
-      );
-
-      let result: number | string = 0;
-      let calculation = '';
-      const calcType = col.calculation.type;
-
-      switch (calcType) {
-        case 'sum':
-          result = allValues.reduce((acc, val) => acc + val, 0);
-          calculation = 'Sum';
-          break;
-        case 'average':
-          result = allValues.length ? allValues.reduce((acc, val) => acc + val, 0) / allValues.length : 0;
-          calculation = 'Average';
-          break;
-        case 'min':
-          result = allValues.length ? Math.min(...allValues) : 0;
-          calculation = 'Min';
-          break;
-        case 'max':
-          result = allValues.length ? Math.max(...allValues) : 0;
-          calculation = 'Max';
-          break;
-        case 'custom':
-          try {
-            if (col.calculation.formula) {
-              // Simple eval for custom formulas - in production, use a proper expression parser
-              const formula = col.calculation.formula.replace(/values/g, JSON.stringify(allValues));
-              result = safeEval(formula) || 0;
-            } else {
-              result = 0;
-            }
-          } catch {
-            result = 0;
-          }
-          calculation = 'Custom';
-          break;
-        default:
-          return;
-      }
-
-      results.push({
-        id: col.id,
-        name: col.name,
-        calculation,
-        result,
-        type: calcType
-      });
-    });
-
-    return results;
-  }, [localQuote, defaultColumns, calculateRowValue, T]);
-
-  // Apply saved Summary formula (if any) for main quote's Grand Total
-  const displayedGrandTotal = useMemo(() => {
-    const formulaSrc = (localQuote as any)?.grandTotalFormula as string | undefined;
-    if (formulaSrc && typeof formulaSrc === 'string' && formulaSrc.trim() !== '') {
-      try {
-        let formula = formulaSrc;
-        // Auto join adjacent variables
-        formula = formula.replace(/(\})\s*(\{)/g, '}+{');
-        // Support legacy/system vars
-        formula = formula
-          .replace(/\{Price\}/g, totalQuote.toString())
-          .replace(/\{Collab\}/g, totalCollabQuote.toString())
-          .replace(/\{P\}/g, totalQuote.toString())
-          .replace(/\{C\}/g, totalCollabQuote.toString())
-          .replace(/\{\s*priceSum\s*\}/g, totalQuote.toString())
-          .replace(/\{\s*collabSum\s*\}/g, totalCollabQuote.toString());
-
-        // Replace calculation results by name (no spaces), id, and A/B/C... shortcuts
-        calculationResults.forEach((calc, index) => {
-          const value = typeof calc.result === 'number' ? calc.result : 0;
-          const varName = calc.name.replace(/\s+/g, '');
-          formula = formula.replaceAll(`{${varName}}`, value.toString());
-          formula = formula.replaceAll(`{${String.fromCharCode(65 + index)}}`, value.toString());
-          formula = formula.replaceAll(`{${calc.id}}`, value.toString());
-        });
-
-        // eslint-disable-next-line no-eval
-        const result = safeEval(formula);
-        if (typeof result === 'number' && !isNaN(result)) return result;
-        return totalQuote;
-      } catch {
-        return totalQuote;
-      }
-    }
-    return totalQuote;
-  }, [localQuote, totalQuote, totalCollabQuote, calculationResults]);
-
-  // Enhanced collaborator calculation results for all collaborator quotes
-  const collaboratorCalculationResults = useMemo(() => {
-    if (!taskCollaboratorQuotes || taskCollaboratorQuotes.length === 0) return [];
-
-    const results: Array<{
-      id: string;
-      name: string;
-      calculation: string;
-      result: number | string;
-      type: ColumnCalculationType;
-    }> = [];
-
-    // Aggregate calculations across all collaborator quotes
-    taskCollaboratorQuotes.forEach(({ quote: collabQuote }) => {
-      if (!collabQuote?.sections) return;
-
-      (collabQuote.columns || defaultColumns).filter((col: any) =>
-        col.calculation && col.calculation.type && col.calculation.type !== 'none' && col.type === 'number'
-      ).forEach((col: any) => {
-        if (!col.calculation) return;
-
-        const allValues = collabQuote.sections!.flatMap((section: any) =>
-          (section.items || []).map((item: any) => calculateRowValue(item, col, collabQuote.columns || defaultColumns))
-            .filter((v: number) => !isNaN(v))
-        );
-
-        let result: number | string = 0;
-        let calculation = '';
-        const calcType = col.calculation.type;
-
-        switch (calcType) {
-          case 'sum':
-            result = allValues.reduce((acc: any, val: any) => acc + val, 0);
-            calculation = 'Sum';
-            break;
-          case 'average':
-            result = allValues.length ? allValues.reduce((acc: any, val: any) => acc + val, 0) / allValues.length : 0;
-            calculation = 'Average';
-            break;
-          case 'min':
-            result = allValues.length ? Math.min(...allValues) : 0;
-            calculation = 'Min';
-            break;
-          case 'max':
-            result = allValues.length ? Math.max(...allValues) : 0;
-            calculation = 'Max';
-            break;
-          case 'custom':
-            try {
-              if (col.calculation.formula) {
-                const formula = col.calculation.formula.replace(/values/g, JSON.stringify(allValues));
-                result = safeEval(formula) || 0;
-              } else {
-                result = 0;
-              }
-            } catch {
-              result = 0;
-            }
-            calculation = 'Custom';
-            break;
-          default:
-            return;
-        }
-
-        const existingIndex = results.findIndex(r => r.id === col.id);
-        if (existingIndex === -1) {
-          results.push({
-            id: col.id,
-            name: col.name,
-            calculation,
-            result,
-            type: calcType
-          });
-        } else {
-          const existing = results[existingIndex];
-          if (typeof existing.result === 'number' && typeof result === 'number') {
-            let merged: number;
-            switch (calcType) {
-              case 'sum':
-                merged = existing.result + result;
-                break;
-              case 'min':
-                merged = Math.min(existing.result, result);
-                break;
-              case 'max':
-                merged = Math.max(existing.result, result);
-                break;
-              case 'average':
-                // Average of averages — approximate; store running sum for later
-                merged = (existing.result + result) / 2;
-                break;
-              default:
-                merged = existing.result;
-            }
-            // Replace immutably
-            results[existingIndex] = { ...existing, result: merged };
-          }
-        }
-      });
-    });
-
-    return results;
-  }, [taskCollaboratorQuotes, defaultColumns, calculateRowValue]);
+  // All quote calculations extracted to dedicated hook
+  const {
+    calculateRowValue,
+    totalQuote,
+    totalCollabQuote,
+    calculationResults,
+    displayedGrandTotal,
+    collaboratorCalculationResults,
+  } = useQuoteCalculations(localQuote, defaultColumns, taskCollaboratorQuotes);
 
   // Share button state
   const [shareOpen, setShareOpen] = useState(false);
@@ -1193,62 +972,9 @@ export function TaskDetailsDialog({
       setShareOpen(true);
     }
   }, [task.id]);
-  // Helper function to extract milestones from quote timeline column (same logic as TimelineCreatorTab)
-  const getMilestonesFromQuote = (quoteData?: Quote): Milestone[] => {
-    if (!quoteData?.sections || !quoteData.columns?.some(col => col.id === 'timeline')) {
-      return [];
-    }
 
-    const milestones: Milestone[] = [];
 
-    quoteData.sections.forEach((section, sectionIndex) => {
-      const items = section.items || [];
-      items.forEach((item, itemIndex) => {
-        let timelineValue = item.customFields?.timeline;
-
-        // Handle both object and JSON string formats
-        if (typeof timelineValue === 'string' && timelineValue.trim() !== '') {
-          try {
-            timelineValue = JSON.parse(timelineValue);
-          } catch (e) {
-            console.warn(`Failed to parse timeline data for section ${sectionIndex}, item ${itemIndex}:`, timelineValue);
-            return;
-          }
-        }
-
-        // Check if timeline data has required start and end dates
-        if (timelineValue &&
-          typeof timelineValue === 'object' &&
-          timelineValue !== null &&
-          timelineValue.start &&
-          timelineValue.end) {
-
-          // Generate consistent milestone ID
-          const sectionIdForMilestone = section.id || `section-${sectionIndex}`;
-          const itemIdForMilestone = item.id || `item-${itemIndex}`;
-          const milestoneId = `${sectionIdForMilestone}-${itemIdForMilestone}`;
-
-          const timelineData = timelineValue as { start: string; end: string; color?: string };
-
-          // Create milestone object
-          const milestone: Milestone = {
-            id: milestoneId,
-            name: item.description || `${section.name || 'Section'} - Item ${itemIndex + 1}`,
-            startDate: timelineData.start,
-            endDate: timelineData.end,
-            color: timelineData.color || `hsl(${(sectionIndex * 137.5 + itemIndex * 60) % 360}, 60%, 55%)`,
-            content: `Section: ${section.name || 'Unnamed Section'}`
-          };
-
-          milestones.push(milestone);
-        }
-      });
-    });
-
-    return milestones;
-  };
-
-  const onShareConfirm = async ({ includeQuote, includeTimeline, hideTimelineColumn, showValidityNote, showBriefLinks, showDriveLinks, overwrite }: { includeQuote: boolean; includeTimeline: boolean; hideTimelineColumn: boolean; showValidityNote: boolean; showBriefLinks: boolean; showDriveLinks: boolean; overwrite: boolean }) => {
+  const onShareConfirm = useCallback(async ({ includeQuote, includeTimeline, hideTimelineColumn, showValidityNote, showBriefLinks, showDriveLinks, overwrite }: { includeQuote: boolean; includeTimeline: boolean; hideTimelineColumn: boolean; showValidityNote: boolean; showBriefLinks: boolean; showDriveLinks: boolean; overwrite: boolean }) => {
     setShareLoading(true);
     try {
       // Build snapshot(s)
@@ -1323,10 +1049,11 @@ export function TaskDetailsDialog({
     } finally {
       setShareLoading(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localQuote, task, settings, clients, categories, defaultColumns, calculationResults, displayedGrandTotal, existingShare, toast, T]);
 
   // PDF Export handler
-  const onExportPdf = async ({ includeQuote, includeTimeline, showValidityNote, hideTimelineColumn }: { includeQuote: boolean; includeTimeline: boolean; showValidityNote: boolean; hideTimelineColumn: boolean }) => {
+  const onExportPdf = useCallback(async ({ includeQuote, includeTimeline, showValidityNote, hideTimelineColumn }: { includeQuote: boolean; includeTimeline: boolean; showValidityNote: boolean; hideTimelineColumn: boolean }) => {
     setIsExportingPdf(true);
     try {
       // Create safe filename (remove special chars)
@@ -1362,7 +1089,8 @@ export function TaskDetailsDialog({
     } finally {
       setIsExportingPdf(false);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task, localQuote, settings, clients, categories, defaultColumns, calculationResults, calculateRowValue, displayedGrandTotal, toast, T]);
 
   const getDeadlineColor = (deadline: Date): string => {
     const today = new Date();
@@ -1532,7 +1260,7 @@ export function TaskDetailsDialog({
   const [isCollabEditOpen, setIsCollabEditOpen] = useState(false);
   const [editingCollabQuoteId, setEditingCollabQuoteId] = useState<string | null>(null);
 
-  const renderQuoteTable = (title: string, quoteData: Quote | undefined, onEdit?: () => void) => {
+  const renderQuoteTable = useCallback((title: string, quoteData: Quote | undefined, onEdit?: () => void) => {
     if (!quoteData) return null;
     return (
       <div>
@@ -1647,7 +1375,8 @@ export function TaskDetailsDialog({
         ))}
       </div>
     );
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [T, settings, defaultColumns, calculateRowValue, copyQuoteToClipboard, copyQuoteAsImage, hideTimelineForExport]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

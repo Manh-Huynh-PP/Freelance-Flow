@@ -131,34 +131,50 @@ export async function uploadShare(userId: string, shareId: string, data: ShareBl
   index.items = index.items.filter(i => i.id !== shareId); // Remove if exists
   index.items.unshift(record);
 
-  // Save index
-  await getSupabaseAdmin().storage
-    .from(BUCKET_NAME)
-    .upload(indexPath, JSON.stringify(index), {
-      contentType: 'application/json',
-      upsert: true,
-    });
-
-  // Also save to global ID map for quick lookup
+  // Save index + global file + task map in parallel (all independent)
   const globalMapPath = `_global/${shareId}.json`;
-  await getSupabaseAdmin().storage
-    .from(BUCKET_NAME)
-    .upload(globalMapPath, JSON.stringify({
-      userBucket,
-      blobPath,
-      createdAt: record.createdAt,
-      expiresAt: record.expiresAt
-    }), {
-      contentType: 'application/json',
-      upsert: true,
-    });
+  const parallelUploads: Promise<any>[] = [
+    getSupabaseAdmin().storage
+      .from(BUCKET_NAME)
+      .upload(indexPath, JSON.stringify(index), {
+        contentType: 'application/json',
+        upsert: true,
+      }),
+    // NEW: Store full data + metadata in global file (1-download for visitors)
+    getSupabaseAdmin().storage
+      .from(BUCKET_NAME)
+      .upload(globalMapPath, JSON.stringify({
+        userBucket,
+        blobPath,
+        createdAt: record.createdAt,
+        expiresAt: record.expiresAt,
+        data, // Embed full share data for single-download access
+      }), {
+        contentType: 'application/json',
+        upsert: true,
+      }),
+  ];
+
+  // Also save task-to-share map for fast O(1) lookup by taskId
+  if (record.taskId) {
+    const taskMapPath = `${userBucket}/_task_${record.taskId}.json`;
+    parallelUploads.push(
+      getSupabaseAdmin().storage
+        .from(BUCKET_NAME)
+        .upload(taskMapPath, JSON.stringify(record), {
+          contentType: 'application/json',
+          upsert: true,
+        })
+    );
+  }
+
+  await Promise.all(parallelUploads);
 
   return { url: `/s/${shareId}` };
 }
 
 // Download share data by ID
 export async function downloadShare(shareId: string): Promise<ShareBlob | null> {
-  // First lookup in global map
   const globalMapPath = `_global/${shareId}.json`;
   const { data: mapData, error: mapError } = await getSupabaseAdmin().storage
     .from(BUCKET_NAME)
@@ -173,29 +189,31 @@ export async function downloadShare(shareId: string): Promise<ShareBlob | null> 
 
   // Lazy Cleanup: Check Expiration
   if (map.expiresAt && new Date(map.expiresAt) < new Date()) {
-    console.log(`[Share] Expired share ${shareId} found. Cleaning up...`);
-
     // Delete content and global map
-    // We leave the user index entry for now as it requires parsing another file
-    // It will be a broken link until user deletes it or we run a full sweep
+    const filesToRemove = [globalMapPath];
+    if (map.blobPath) filesToRemove.push(map.blobPath);
     await getSupabaseAdmin().storage
       .from(BUCKET_NAME)
-      .remove([globalMapPath, map.blobPath]);
-
+      .remove(filesToRemove);
     return null;
   }
 
-  // Download the actual share data
-  const { data, error } = await getSupabaseAdmin().storage
-    .from(BUCKET_NAME)
-    .download(map.blobPath);
-
-  if (error || !data) {
-    return null;
+  // NEW FORMAT: data embedded directly in global file → 1 download, done!
+  if (map.data) {
+    return map.data as ShareBlob;
   }
 
-  const text = await data.text();
-  return JSON.parse(text);
+  // OLD FORMAT (backward compat): data stored separately → 2nd download
+  if (map.blobPath) {
+    const { data, error } = await getSupabaseAdmin().storage
+      .from(BUCKET_NAME)
+      .download(map.blobPath);
+    if (error || !data) return null;
+    const text = await data.text();
+    return JSON.parse(text);
+  }
+
+  return null;
 }
 
 // List user's shares
@@ -220,29 +238,36 @@ export async function listShares(userId: string): Promise<ShareRecord[]> {
   }
 }
 
-// Find existing share by taskId
+// Find existing share by taskId — O(1) direct file lookup via task map
 export async function findShareByTaskId(userId: string, taskId: string): Promise<ShareRecord | null> {
-  const shares = await listShares(userId);
-  return shares.find(s => s.taskId === taskId) || null;
+  const userBucket = userBucketId(userId);
+  const taskMapPath = `${userBucket}/_task_${taskId}.json`;
+  try {
+    const { data, error } = await getSupabaseAdmin().storage
+      .from(BUCKET_NAME)
+      .download(taskMapPath);
+    if (error || !data) {
+      // Fallback: search index for backward compatibility with old shares
+      const shares = await listShares(userId);
+      return shares.find(s => s.taskId === taskId) || null;
+    }
+    const text = await data.text();
+    return JSON.parse(text);
+  } catch {
+    // Fallback to full index scan
+    const shares = await listShares(userId);
+    return shares.find(s => s.taskId === taskId) || null;
+  }
 }
 
 // Delete a share
 export async function deleteShare(userId: string, shareId: string): Promise<boolean> {
   const userBucket = userBucketId(userId);
   const { blobPath, indexPath } = buildSharePaths(userBucket, shareId);
-
-  // Delete the share data
-  await getSupabaseAdmin().storage
-    .from(BUCKET_NAME)
-    .remove([blobPath]);
-
-  // Delete from global map
   const globalMapPath = `_global/${shareId}.json`;
-  await getSupabaseAdmin().storage
-    .from(BUCKET_NAME)
-    .remove([globalMapPath]);
 
-  // Update index
+  // Update index first to get taskId for task map cleanup
+  let taskId: string | null = null;
   try {
     const { data } = await getSupabaseAdmin().storage
       .from(BUCKET_NAME)
@@ -251,6 +276,8 @@ export async function deleteShare(userId: string, shareId: string): Promise<bool
     if (data) {
       const text = await data.text();
       const index = JSON.parse(text);
+      const deletedRecord = index.items.find((i: ShareRecord) => i.id === shareId);
+      taskId = deletedRecord?.taskId || null;
       index.items = index.items.filter((i: ShareRecord) => i.id !== shareId);
 
       await getSupabaseAdmin().storage
@@ -261,8 +288,18 @@ export async function deleteShare(userId: string, shareId: string): Promise<bool
         });
     }
   } catch {
-    // Index update failed, but share is deleted
+    // Index update failed, continue with file deletion
   }
+
+  // Delete blob + global map + task map in parallel
+  const filesToRemove = [blobPath, globalMapPath];
+  if (taskId) {
+    filesToRemove.push(`${userBucket}/_task_${taskId}.json`);
+  }
+
+  await getSupabaseAdmin().storage
+    .from(BUCKET_NAME)
+    .remove(filesToRemove);
 
   return true;
 }
@@ -281,6 +318,10 @@ export async function deleteAllShares(userId: string): Promise<boolean> {
       const { blobPath } = buildSharePaths(userBucket, share.id);
       pathsToDelete.push(blobPath);
       pathsToDelete.push(`_global/${share.id}.json`);
+      // Also cleanup task map
+      if (share.taskId) {
+        pathsToDelete.push(`${userBucket}/_task_${share.taskId}.json`);
+      }
     }
 
     // Add index file to deletion list

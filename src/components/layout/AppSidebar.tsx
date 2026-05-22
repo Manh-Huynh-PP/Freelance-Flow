@@ -272,7 +272,7 @@ export function AppSidebar() {
             </SidebarGroup>
 
             {/* Share Manager Dialog */}
-            <ShareManagerDialog open={isShareManagerOpen} onOpenChange={setIsShareManagerOpen} />
+            <ShareManagerDialog open={isShareManagerOpen} onOpenChange={setIsShareManagerOpen} language={appData.appSettings.language} />
           </div>
         </div>
       </SidebarContent>

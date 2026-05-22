@@ -16,16 +16,16 @@ type ShareRecord = {
   expiresAt?: string | null;
 };
 
-type Props = { open: boolean; onOpenChange: (v: boolean) => void };
+type Props = { open: boolean; onOpenChange: (v: boolean) => void; language?: string };
 
-export default function ShareManagerDialog({ open, onOpenChange }: Props) {
+export default function ShareManagerDialog({ open, onOpenChange, language = 'vi' }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [items, setItems] = React.useState<ShareRecord[]>([]);
   const [error, setError] = React.useState<string>('');
   const [deletingId, setDeletingId] = React.useState<string>('');
   const { toast } = useToast();
   const { session } = useAuth();
-  const T = i18n.vi;
+  const T = React.useMemo(() => (i18n as any)[language] || i18n.en, [language]);
 
   const load = async () => {
     setLoading(true);
@@ -45,7 +45,9 @@ export default function ShareManagerDialog({ open, onOpenChange }: Props) {
     setLoading(false);
   };
 
-  React.useEffect(() => { if (open && session) load(); }, [open, session]);
+  // Only depend on session existence (boolean), not reference identity
+  const hasSession = !!session;
+  React.useEffect(() => { if (open && hasSession) load(); }, [open, hasSession]);
 
   const copyLink = async (id: string) => {
     try {
@@ -61,12 +63,12 @@ export default function ShareManagerDialog({ open, onOpenChange }: Props) {
       const res = await authFetch(`/api/share/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setItems(prev => prev.filter(x => x.id !== id));
-        toast({ title: 'Đã xoá liên kết' });
+        toast({ title: T.shareDeleted || 'Share deleted' });
       } else {
-        toast({ variant: 'destructive', title: 'Không xoá được liên kết' });
+        toast({ variant: 'destructive', title: T.shareDeleteFailed || 'Failed to delete share' });
       }
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Lỗi mạng' });
+      toast({ variant: 'destructive', title: T.networkError || 'Network error' });
     }
     setDeletingId('');
   };
@@ -77,7 +79,7 @@ export default function ShareManagerDialog({ open, onOpenChange }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{T.manageShares || 'Shared Links'}</DialogTitle>
-            <DialogDescription>Đăng nhập để xem các liên kết đã chia sẻ</DialogDescription>
+            <DialogDescription>{T.loginToViewShares || 'Login to view shared links'}</DialogDescription>
           </DialogHeader>
         </DialogContent>
       </Dialog>
@@ -92,15 +94,15 @@ export default function ShareManagerDialog({ open, onOpenChange }: Props) {
             <LinkIcon className="w-5 h-5" />
             {T.manageShares || 'Shared Links'}
           </DialogTitle>
-          <DialogDescription>Quản lý các liên kết chia sẻ công khai của bạn</DialogDescription>
+          <DialogDescription>{T.manageSharesDesc || 'Manage your public shared links'}</DialogDescription>
         </DialogHeader>
         
-        {loading && <div className="py-4 text-center text-muted-foreground">Đang tải...</div>}
+        {loading && <div className="py-4 text-center text-muted-foreground">{T.loading || 'Loading...'}</div>}
         {error && <div className="py-4 text-center text-destructive">{error}</div>}
         
         {!loading && items.length === 0 && (
           <div className="py-8 text-center text-muted-foreground">
-            Chưa có liên kết nào được chia sẻ
+            {T.noSharesYet || 'No shared links yet'}
           </div>
         )}
         

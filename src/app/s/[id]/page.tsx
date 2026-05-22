@@ -6,6 +6,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { downloadShare } from '@/lib/supabase-storage';
+import { cache } from 'react';
 
 // Dynamic imports for heavy client components
 const QuoteViewer = dynamic(() => import('@/components/share/quote-viewer'), {
@@ -23,7 +24,7 @@ async function getOrigin() {
   return process.env.NEXT_PUBLIC_APP_ORIGIN || 'http://localhost:3000';
 }
 
-import { cache } from 'react';
+
 
 // Revalidate every 60 seconds (ISR)
 export const revalidate = 60;
@@ -31,18 +32,12 @@ export const revalidate = 60;
 // Deduplicate share loading within a single request
 const loadShare = cache(async (id: string) => {
   try {
-    // Call Supabase directly instead of going through API
-    // This avoids issues with server-side fetch being blocked by proxy
-    console.log('[Share Page] Loading share directly from Supabase:', id);
     const shareData = await downloadShare(id);
 
     if (!shareData) {
-      console.log('[Share Page] Share not found in Supabase');
       return null;
     }
 
-    console.log('[Share Page] Loaded share data, kind:', shareData.kind);
-    // Return format matching API response (shareData directly)
     return shareData;
   } catch (error) {
     console.error('[Share Page] Error loading share:', error);

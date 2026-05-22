@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
+import React, { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback, useRef } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { format, addDays, startOfMonth } from "date-fns";
+import { format } from "date-fns";
 import {
-  CalendarIcon, PlusCircle, Trash2,
+  PlusCircle, Trash2,
   ChevronDown, Plus,
 } from "lucide-react";
 
@@ -18,8 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
 import TaskDateRangePicker from "./TaskDateRangePicker";
 import { useToast } from "@/hooks/use-toast";
 import { i18n } from "@/lib/i18n";
@@ -29,7 +28,7 @@ import type { SuggestQuoteOutput } from "@/lib/ai-types";
 import { QuoteManager } from "./quote-manager";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { useDashboard } from "@/contexts/dashboard-context";
-import { useRef } from "react";
+
 import { TaskFormToolbar } from "@/components/task-form-toolbar";
 
 const formSchema = z.object({
@@ -200,6 +199,9 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
       });
       onDirtyChange?.(true);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Intentionally omit form, onDirtyChange, setColumns, setCollaboratorColumns
+  // to prevent re-running when form reference changes.
   }, [prefillValues, prefillColumns, prefillCollaboratorColumns]);
   const { toast } = useToast();
   const T = useMemo(() => ({
@@ -237,7 +239,7 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
   const defaultColumns: QuoteColumn[] = React.useMemo(() => [
     { id: 'description', name: T.description, type: 'text' },
     { id: 'unitPrice', name: `${T.unitPrice} (${settings.currency})`, type: 'number', calculation: { type: 'sum' } },
-  ], [T, settings.currency]);
+  ], [T.description, T.unitPrice, settings.currency]);
 
   const [columns, setColumns] = useState<QuoteColumn[]>(defaultColumns);
   const [collaboratorColumns, setCollaboratorColumns] = useState<QuoteColumn[]>(defaultColumns);
@@ -281,6 +283,9 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
   const watchedDates = useWatch({ control, name: "dates" }) || { from: undefined, to: undefined };
   const currentStartDate = watchedDates?.from instanceof Date ? watchedDates.from : undefined;
   const currentEndDate = watchedDates?.to instanceof Date ? watchedDates.to : undefined;
+  const watchedDescription = useWatch({ control, name: 'description' });
+  const watchedGrandTotalFormula = useWatch({ control, name: 'grandTotalFormula' });
+  const watchedCollabQuotes = useWatch({ control, name: 'collaboratorQuotes' });
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -293,8 +298,6 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
 
   const handleFormSubmit = useCallback((data: TaskFormValues) => {
     onStartSaving?.();
-    // debug trace - POST to server so we can observe ordering in node logs
-    try { void fetch('/api/_trace-saving', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source: 'CreateTaskForm', event: 'onStartSaving', ts: Date.now() }) }); } catch (e) { }
     // Convert dates from form format to task format
     const safeDates = data?.dates || { from: undefined, to: undefined };
     const cleanedData: any = {
@@ -323,7 +326,6 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
     handleSaveDraft() {
       const values = getValues();
       onStartSaving?.();
-      try { void fetch('/api/_trace-saving', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source: 'CreateTaskForm', event: 'onStartSaving-draft', ts: Date.now() }) }); } catch (e) { }
       const safeDates = values?.dates || { from: undefined, to: undefined };
       const draftData: any = {
         ...values,
@@ -417,8 +419,8 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
       });
     } else {
       toast({
-        title: "Lỗi",
-        description: "Vui lòng chọn collaborator trước khi sao chép",
+        title: (T as any).error || "Error",
+        description: (T as any).selectCollaboratorFirst || "Please select a collaborator before copying",
         variant: "destructive"
       });
     }
@@ -874,12 +876,12 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
                     title={T.priceQuote}
                     quoteTemplates={quoteTemplates}
                     settings={settings}
-                    taskDescription={getValues('description') || ''}
+                    taskDescription={watchedDescription || ''}
                     taskCategory={categoryName}
                     onApplySuggestion={handleApplySuggestion}
                     taskStartDate={currentStartDate}
                     taskEndDate={currentEndDate}
-                    grandTotalFormula={form.watch('grandTotalFormula') as any}
+                    grandTotalFormula={watchedGrandTotalFormula || ''}
                     onGrandTotalFormulaChange={(v) => form.setValue('grandTotalFormula', v, { shouldDirty: true })}
                   />
                 </CollapsibleContent>
@@ -990,7 +992,7 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
                           showCopyFromQuote={true}
                           taskStartDate={currentStartDate}
                           taskEndDate={currentEndDate}
-                          grandTotalFormula={form.watch(`collaboratorQuotes.${index}.grandTotalFormula`) as any}
+                          grandTotalFormula={watchedCollabQuotes?.[index]?.grandTotalFormula || ''}
                           onGrandTotalFormulaChange={(v) => form.setValue(`collaboratorQuotes.${index}.grandTotalFormula`, v, { shouldDirty: true })}
                         />
                       </div>
@@ -1012,7 +1014,7 @@ export const CreateTaskForm = forwardRef<CreateTaskFormRef, CreateTaskFormProps>
           <div className="flex-none flex flex-col-reverse sm:flex-row justify-between gap-4 p-4 bg-background border-t z-10 mt-auto">
             <TaskFormToolbar
               settings={settings}
-              taskDescription={getValues('description') || ''}
+              taskDescription={watchedDescription || ''}
               taskCategory={categoryName}
               onApplySuggestion={handleApplySuggestion}
             />

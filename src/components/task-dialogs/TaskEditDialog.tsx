@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import type { Task, Quote, Client, QuoteColumn, QuoteTemplate, Collaborator, AppSettings, Category } from '@/lib/types';
 import { EditTaskForm, type TaskFormValues } from '../edit-task-form';
 import { useToast } from '@/hooks/use-toast';
@@ -67,7 +67,7 @@ export function TaskEditDialog({
   const [editDialogSize, setEditDialogSize] = useState<'default' | 'large' | 'fullscreen'>('default');
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const dirtyCheckRef = React.useRef<() => boolean>(() => isDirty);
+  const dirtyCheckRef = useRef<() => boolean>(() => isDirty);
   const externalSubmitRef = useRef<() => void>();
   // When true, we are saving and should bypass the unsaved-changes guard
   const isSavingRef = useRef(false);
@@ -137,7 +137,7 @@ export function TaskEditDialog({
     }
   };
 
-  const T = (i18n as any)[settings.language] || i18n.en;
+  const T = useMemo(() => (i18n as any)[settings.language] || i18n.en, [settings.language]);
 
   const isCreate = !task;
   const handleOpenChange = useCallback((open: boolean) => {
