@@ -144,10 +144,29 @@ export function useAppData() {
       }
     },
     {
-      onSuccess: (updatedData) => {
-        queryClient.setQueryData(['appData', session?.user?.id], parseDates(updatedData));
+      // Optimistic update: immediately update cache before API call
+      onMutate: async (updates) => {
+        // Cancel any outgoing refetches to avoid overwriting optimistic update
+        await queryClient.cancelQueries(['appData', session?.user?.id]);
+
+        // Snapshot current data for rollback
+        const previousData = queryClient.getQueryData<AppData>(['appData', session?.user?.id]);
+
+        // Optimistically update cache
+        if (previousData) {
+          queryClient.setQueryData(
+            ['appData', session?.user?.id],
+            parseDates({ ...previousData, ...updates })
+          );
+        }
+
+        return { previousData };
       },
-      onError: (error: any) => {
+      onError: (error: any, _updates, context) => {
+        // Rollback to previous data on error
+        if (context?.previousData) {
+          queryClient.setQueryData(['appData', session?.user?.id], context.previousData);
+        }
         toast({
           title: "Data Sync Error",
           description: error.message || "Failed to save data. Please try again.",
@@ -165,7 +184,18 @@ export function useAppData() {
   const setAppData = useCallback((updater: (prev: AppData) => AppData) => {
     const currentData = queryClient.getQueryData<AppData>(['appData', session?.user?.id]) ?? safeInitialAppData;
     const newData = updater(currentData);
-    handleGenericUpdate(newData);
+
+    // Compute diff: only send collections that actually changed (by reference)
+    const diff: Partial<AppData> = {};
+    for (const key of Object.keys(newData) as (keyof AppData)[]) {
+      if (newData[key] !== currentData[key]) {
+        (diff as any)[key] = newData[key];
+      }
+    }
+
+    if (Object.keys(diff).length > 0) {
+      handleGenericUpdate(diff);
+    }
   }, [handleGenericUpdate, queryClient]);
 
   const saveAppData = useCallback(async (updates: Partial<AppData>) => {
@@ -173,18 +203,9 @@ export function useAppData() {
       const currentData = queryClient.getQueryData<AppData>(['appData', session?.user?.id]) ?? safeInitialAppData;
       const newData = { ...currentData, ...updates } as AppData;
 
-      console.log('💾 saveAppData called with updates:', {
-        clientsCount: updates.clients?.length,
-        tasksCount: updates.tasks?.length,
-        projectsCount: updates.projects?.length,
-        quotesCount: updates.quotes?.length,
-        hasAppSettings: !!updates.appSettings
-      });
 
-      // For normal saves, use saveAppData with isRestore=false
-      // This will NOT clear data or remap IDs
+
       if (updates.clients || updates.tasks || updates.projects || updates.quotes) {
-        console.log('🔄 Using saveAppData for bulk update (normal save)...');
         await SupabaseDataService.saveAppData(newData, true, false);
       } else {
         // For individual updates, use specific save methods
@@ -195,7 +216,7 @@ export function useAppData() {
       // Update local cache
       queryClient.setQueryData(['appData', session?.user?.id], parseDates(newData));
 
-      console.log('✅ Data saved successfully');
+
     } catch (error: any) {
       const errorMessage = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error)) || 'Unknown error';
       console.error('❌ saveAppData error:', error, 'Message:', errorMessage);

@@ -95,9 +95,6 @@ export default async function ShareViewerPage({ params }: { params: Promise<{ id
   }
   const snapshot: any = data.data;
 
-  // fire-and-forget tracking (best-effort, direct server-side call)
-  import('@/lib/supabase-storage').then(mod => mod.trackView(id)).catch(() => { });
-
   // Unified landing-style page
   const task = resolveTask(snapshot) as any;
   const settings = (snapshot as any).settings || (snapshot.kind === 'combined' ? (snapshot.timeline?.settings || snapshot.quote?.settings) : undefined);

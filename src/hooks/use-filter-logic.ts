@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { useSearchParams, usePathname } from 'next/navigation';
 import type { Task, AppSettings, FilterSettings } from '@/lib/types';
 import { DateRange } from 'react-day-picker';
 import { FilterSettingsService } from '@/lib/filter-settings-service';
@@ -11,7 +11,7 @@ export function useFilterLogic(
   appSettings: AppSettings, 
   view: 'active' | 'trash'
 ) {
-  const router = useRouter();
+
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
@@ -23,8 +23,13 @@ export function useFilterLogic(
   const [sortFilter, setSortFilter] = useState<string>('deadline-asc');
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const hasInitializedRef = useRef(false);
 
   useEffect(() => {
+    // D4 fix: Only initialize filters once on mount to prevent mid-session resets
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
     const savedSettings = appSettings.filterSettings || FilterSettingsService.getFilterSettings();
     const defaultSettings = FilterSettingsService.createDefaultSettings(
       appSettings.statusSettings?.map(s => s.id) || []
@@ -48,7 +53,8 @@ export function useFilterLogic(
       setDate({ from: mergedSettings.dateRange.from ? new Date(mergedSettings.dateRange.from) : undefined, to: mergedSettings.dateRange.to ? new Date(mergedSettings.dateRange.to) : undefined });
     }
     setSortFilter(searchParams.get('sort') || mergedSettings.sortFilter);
-  }, [appSettings.filterSettings, appSettings.statusSettings]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (saveTimeoutRef.current) {
@@ -133,10 +139,11 @@ export function useFilterLogic(
     const query = search ? `?${search}` : '';
     const newPath = `${pathname}${query}`;
     
+    // D5 fix: Use history.replaceState instead of router.replace to avoid Next.js re-renders
     if (typeof window !== 'undefined' && newPath !== `${pathname}${window.location.search}`) {
-        router.replace(newPath, { scroll: false });
+        window.history.replaceState(null, '', newPath);
     }
-  }, [selectedStatuses, categoryFilter, clientFilter, projectFilter, date, sortFilter, pathname, router, searchParams]);
+  }, [selectedStatuses, categoryFilter, clientFilter, projectFilter, date, sortFilter, pathname, searchParams, appSettings.statusSettings]);
 
   // Filter handlers
   const handleStatusFilterChange = (statusId: string, isSelected: boolean) => {
@@ -176,7 +183,7 @@ export function useFilterLogic(
     }
     const search = current.toString();
     const query = search ? `?${search}` : "";
-    router.replace(`${pathname}${query}`, { scroll: false });
+    window.history.replaceState(null, '', `${pathname}${query}`);
   };
 
   const handleDateRangeChange = (range: DateRange | undefined) => {
@@ -195,7 +202,7 @@ export function useFilterLogic(
     ['statuses', 'category', 'client', 'project', 'collaborator', 'startDate', 'endDate', 'sort'].forEach(key => current.delete(key));
     const search = current.toString();
     const query = search ? `?${search}` : "";
-    router.replace(`${pathname}${query}`, { scroll: false });
+    window.history.replaceState(null, '', `${pathname}${query}`);
     // also reset local states
     setSelectedStatuses(appSettings.statusSettings?.map(s => s.id) || []);
     setCategoryFilter(null);

@@ -128,17 +128,7 @@ export class SupabaseDataService {
         };
       }
 
-      // Debug: Log raw data from Supabase
-      console.log('🔍 Supabase loadAppData - raw projects from DB:', projects.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        client_id: p.client_id,
-        project_data: p.project_data,
-      })));
-      console.log('🔍 Supabase loadAppData - raw clients from DB:', clients.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-      })));
+
 
       return {
         ...initialAppData, // Start with defaults to ensure all properties exist
@@ -191,12 +181,6 @@ export class SupabaseDataService {
           // Restore full quote data from JSONB quote_data field
           const extraData = quote.quote_data || {};
 
-          // DEBUG: Log quote loading
-          console.log('📊 [loadAppData Debug] Quote loaded:', {
-            id: quote.id,
-            quote_data_keys: Object.keys(extraData),
-            sectionsCount: extraData.sections?.length,
-          });
 
           return {
             id: quote.id,
@@ -459,14 +443,6 @@ export class SupabaseDataService {
         };
       });
 
-      // DEBUG: Log quote_data before save
-      console.log('📊 [saveQuotes Debug] Quote data to save:', quotesWithUserId.map(q => ({
-        id: q.id,
-        status: q.status,
-        quote_data_keys: Object.keys(q.quote_data || {}),
-        sectionsCount: q.quote_data?.sections?.length,
-        firstSectionItems: q.quote_data?.sections?.[0]?.items?.length,
-      })));
 
       const { error: quotesError } = await client.from('quotes').upsert(quotesWithUserId, { onConflict: 'user_id,id' });
       if (quotesError) throw toError(quotesError);

@@ -31,28 +31,14 @@ export function useWorkTimeData(initialSessions?: WorkSession[], onPersist?: (se
     return Array.isArray(initialSessions) ? initialSessions : [];
   });
   const initializedRef = useRef(false);
-
-  // Ensure we synchronously reconcile localStorage on mount/user-change.
-  useEffect(() => {
-    if (userId === 'anon') return;
-
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          console.debug('[worktime] mount: loaded sessions from localStorage', parsed);
-          setSessions(parsed);
-          initializedRef.current = true;
-          return;
-        }
-      }
-    } catch (err) {
-      console.debug('[worktime] mount: failed to read localStorage', err);
-    }
-  }, [STORAGE_KEY, userId]);
+  // Ref guard: track previous initialSessions reference to avoid re-merging on every render
+  const prevInitialRef = useRef(initialSessions);
 
   useEffect(() => {
+    // Skip if initialSessions reference hasn't changed (prevents re-merge loops)
+    if (prevInitialRef.current === initialSessions && initializedRef.current) return;
+    prevInitialRef.current = initialSessions;
+
     // Initialize from app-provided sessions only once (or when they contain data).
     if (Array.isArray(initialSessions)) {
       // Filter out active sessions (no endTime) from app-provided data to avoid
@@ -63,33 +49,31 @@ export function useWorkTimeData(initialSessions?: WorkSession[], onPersist?: (se
       if (!initializedRef.current) {
         initializedRef.current = true;
         // If local already has sessions, merge completed ones without overwriting local
-        if ((sessions || []).length === 0 && appCompleted.length > 0) {
-          console.debug('[worktime] init: applying app-provided completed sessions because local is empty', appCompleted);
-          setSessions(appCompleted);
-          return;
-        }
-        if ((sessions || []).length > 0 && appCompleted.length > 0) {
-          // merge dedupe by id, prefer local
-          const byId: Record<string, any> = {};
-          [...appCompleted, ...sessions].forEach(s => { byId[s.id] = byId[s.id] || s; });
-          const merged = Object.values(byId) as WorkSession[];
-          console.debug('[worktime] init: merging app-completed sessions into local', merged);
-          setSessions(merged);
-          return;
-        }
+        setSessions(prev => {
+          if (prev.length === 0 && appCompleted.length > 0) {
+            return appCompleted;
+          }
+          if (prev.length > 0 && appCompleted.length > 0) {
+            // merge dedupe by id, prefer local
+            const byId: Record<string, any> = {};
+            [...appCompleted, ...prev].forEach(s => { byId[s.id] = byId[s.id] || s; });
+            return Object.values(byId) as WorkSession[];
+          }
+          return prev;
+        });
       } else {
         // Post-init updates (e.g., after a restore): only add completed sessions that don't exist locally
         if (appCompleted.length > 0) {
-          const localIds = new Set((sessions || []).map(s => s.id));
-          const toAdd = appCompleted.filter(s => !localIds.has(s.id));
-          if (toAdd.length > 0) {
-            console.debug('[worktime] update: adding non-duplicate completed sessions from appData', toAdd);
-            setSessions(prev => [...prev, ...toAdd]);
-          }
+          setSessions(prev => {
+            const localIds = new Set(prev.map(s => s.id));
+            const toAdd = appCompleted.filter(s => !localIds.has(s.id));
+            if (toAdd.length > 0) return [...prev, ...toAdd];
+            return prev;
+          });
         }
       }
     }
-  }, [initialSessions, sessions.length]);
+  }, [initialSessions]);
 
   useEffect(() => {
     try {
@@ -104,12 +88,6 @@ export function useWorkTimeData(initialSessions?: WorkSession[], onPersist?: (se
     } catch { }
   }, [sessions, STORAGE_KEY, userId]);
 
-  // Provide a safe reset if sessions field missing after a restore
-  useEffect(() => {
-    if (!initialSessions && sessions.length === 0) {
-      // Optional reset logic if needed
-    }
-  }, [initialSessions, sessions.length]);
 
   const checkIn = useCallback(() => {
     setSessions(prev => {

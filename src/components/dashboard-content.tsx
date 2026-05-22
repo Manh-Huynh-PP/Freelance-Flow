@@ -77,15 +77,6 @@ function DashboardContentInner({ searchParams }: { searchParams: ReadonlyURLSear
   const context = useDashboard();
   const isFullView = searchParams.get('full') === '1';
 
-  // 🔧 DEBUG: Log dashboard context data
-  console.log('📊 Dashboard Content data status:', {
-    hasContext: !!context,
-    hasAppData: !!context?.appData,
-    tasksCount: context?.appData?.tasks?.length || 0,
-    clientsCount: context?.appData?.clients?.length || 0,
-    isDataLoaded: context?.isDataLoaded,
-  });
-
   const {
     appData, handleViewTask, handleEditTask, handleAddTask, handleTaskStatusChange,
     handleDeleteTask, handleRestoreTask, handlePermanentDeleteTask,

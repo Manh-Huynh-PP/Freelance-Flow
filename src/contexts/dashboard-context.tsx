@@ -47,7 +47,7 @@ function DashboardDataProvider({ children }: { children: ReactNode }) {
 
     // Derive lightweight aggregated stats for older UI that expects workTime.stats
     // and ensure sessions persist into the central appData so other consumers (backups, AI) can read them.
-    const derivedWorkTime = (() => {
+    const derivedWorkTime = useMemo(() => {
         try {
             const sessions = (workTime && workTime.sessions) || [];
             // Build a 7-day range ending today for legacy stats consumers
@@ -61,7 +61,7 @@ function DashboardDataProvider({ children }: { children: ReactNode }) {
         } catch (e) {
             return workTime;
         }
-    })();
+    }, [workTime]);
 
     // NOTE: session persistence effect moved lower after setAppData is defined to avoid hoisting issues.
 
@@ -202,17 +202,8 @@ function DashboardDataProvider({ children }: { children: ReactNode }) {
 
     // Debug wrapper for updateTask
     const wrappedUpdateTask = useCallback((updates: Partial<Task> & { id: string }) => {
-        console.log('DashboardContext: updateTask called', {
-            taskId: updates.id,
-            updates: Object.keys(updates),
-            milestonesCount: updates.milestones?.length,
-            hasDataUpdateTask: !!data.updateTask
-        });
-
         if (data.updateTask) {
             data.updateTask(updates);
-        } else {
-            console.error('DashboardContext: data.updateTask is not available');
         }
     }, [data.updateTask]);
 
@@ -816,10 +807,7 @@ function DashboardDataProvider({ children }: { children: ReactNode }) {
             console.error('Export failed', e);
         }
     }, [data.appData, defaultExportFormat, data.saveAppData]);
-    useEffect(() => {
-        const ts = typeof window !== 'undefined' ? localStorage.getItem('freelance-flow-last-backup') : null;
-        if (ts) setBackupStatusText(new Date(ts).toLocaleString());
-    }, []);
+
 
     const contextValue: DashboardContextType = {
         ...data,
