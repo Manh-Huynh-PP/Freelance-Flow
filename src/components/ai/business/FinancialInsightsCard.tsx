@@ -89,7 +89,7 @@ type Period = 'all' | 'week' | 'month' | 'year';
 
 export function FinancialInsightsCard({ breakdown = null, monthlyData = null, currency = 'USD', locale = 'en-US' }: FinancialInsightsCardProps) {
   const { appData } = useDashboard();
-  const T = i18n[appData?.appSettings?.language as keyof typeof i18n || 'en'];
+  const T = i18n[appData?.appSettings?.language as keyof typeof i18n || 'en'] as any;
   const now = new Date();
   // Independent period state (not shared with Financial Summary)
   const [period, setPeriod] = useState<Period>('all');
@@ -108,9 +108,6 @@ export function FinancialInsightsCard({ breakdown = null, monthlyData = null, cu
   }>({ title: '', items: [], type: 'revenue' });
 
   const formatCurrency = (value: number) => {
-    // Add debug logging
-    console.log('formatCurrency called with:', value, typeof value);
-
     if (typeof value !== 'number' || isNaN(value)) {
       return '0';
     }
@@ -181,24 +178,7 @@ export function FinancialInsightsCard({ breakdown = null, monthlyData = null, cu
   const computedMonthly = useMemo(() => {
     if (!appData) return [];
     try {
-      // Use Financial Summary logic for each month to ensure consistency
-      const monthlyData = calculateMonthlyFinancials(appData as any, selectedRange);
-      return monthlyData.map(month => {
-        // Get precise Financial Summary values for this specific month
-        const [year, monthNum] = month.monthYear.split('-').map(Number);
-        const monthStart = new Date(year, monthNum - 1, 1);
-        const monthEnd = new Date(year, monthNum, 0);
-        const monthRange = { from: monthStart, to: monthEnd };
-
-        const summary = calculateFinancialSummary(appData as any, monthRange);
-
-        return {
-          monthYear: month.monthYear,
-          revenue: summary.revenue,
-          costs: summary.costs,
-          profit: summary.profit
-        };
-      });
+      return calculateMonthlyFinancials(appData as any, selectedRange);
     } catch {
       return [];
     }
@@ -206,14 +186,6 @@ export function FinancialInsightsCard({ breakdown = null, monthlyData = null, cu
 
   const topClientsData = useMemo(() => computedBreakdown.slice(0, 8), [computedBreakdown]);
   const monthlyChartData = computedMonthly;
-
-  // Debug period selection
-  console.log('=== Financial Insights Period Selection Debug ===');
-  console.log('Current period:', period);
-  console.log('Selected range:', selectedRange);
-  console.log('Monthly chart data (using Financial Summary):', monthlyChartData);
-  console.log('Revenue breakdown data:', topClientsData);
-  console.log('===============================');
 
   const tooltipNameMap = {
     revenue: T.revenue || 'Revenue',
@@ -244,7 +216,6 @@ export function FinancialInsightsCard({ breakdown = null, monthlyData = null, cu
       // For Monthly charts - filter by month
       const monthYear = data?.monthYear || data?.payload?.monthYear;
       if (!monthYear) {
-        console.warn('handleChartClick: monthYear not found in data', data);
         return;
       }
 

@@ -84,12 +84,11 @@ type Period = 'all' | 'week' | 'month' | 'year';
 
 export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDetails, additionalFinancials, additionalTaskDetails, onTaskClick, onDateRangeChange }: FinancialSummaryCardProps) {
   const { appData, setAppData } = useDashboard();
-  const T = i18n[appData?.appSettings?.language as keyof typeof i18n || 'en'];
+  const T = i18n[appData?.appSettings?.language as keyof typeof i18n || 'en'] as any;
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<'revenue' | 'costs' | 'future-revenue' | 'lost-revenue' | 'fixed-costs' | null>(null);
   const [dialogSearch, setDialogSearch] = useState('');
-  const rangeCtx = null; // Remove analytics range context
   const [period, setPeriod] = useState<Period>('all');
   // Anchors for period selection
   const now = new Date();
@@ -196,14 +195,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
 
   // Derive dateRange from selected period and anchors
   const selectedRange = useMemo(() => {
-    console.log(`🗓️ Period Selection Debug:`);
-    console.log(`   Period: ${period}`);
-    console.log(`   Week date: ${weekDate}`);
-    console.log(`   Month value: ${monthValue}`);
-    console.log(`   Year value: ${yearValue}`);
-
     if (period === 'all') {
-      console.log(`   → Range: all (no filter)`);
       return {} as { from?: Date; to?: Date };
     }
     if (period === 'week') {
@@ -216,21 +208,18 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
       const end = new Date(start);
       end.setDate(end.getDate() + 6);
       end.setHours(23, 59, 59, 999);
-      console.log(`   → Week range: ${start.toISOString()} to ${end.toISOString()}`);
+      end.setHours(23, 59, 59, 999);
       return { from: start, to: end };
     }
     if (period === 'month') {
       const [y, m] = monthValue.split('-').map(Number);
       const from = new Date(y, (m || 1) - 1, 1);
       const to = new Date(y, (m || 1), 0);
-      console.log(`   → Month range: ${from.toISOString()} to ${to.toISOString()}`);
-      console.log(`   → Month calculation: year=${y}, month=${m}, from=${from.toString()}, to=${to.toString()}`);
       return { from, to };
     }
     // year
     const from = new Date(yearValue, 0, 1);
     const to = new Date(yearValue, 11, 31);
-    console.log(`   → Year range: ${from.toISOString()} to ${to.toISOString()}`);
     return { from, to };
   }, [period, weekDate, monthValue, yearValue]);
 
@@ -243,10 +232,6 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
 
   // Compute period-based metrics
   const viewSummary = useMemo(() => {
-    console.log('🔍 FinancialSummaryCard selectedRange:', selectedRange);
-    console.log('🔍 Period:', period);
-    console.log('🔍 Month value:', monthValue);
-    console.log('🔍 Year value:', yearValue);
     return appData ? calculateFinancialSummary(appData as any, selectedRange) : summary || { revenue: 0, costs: 0, profit: 0 };
   }, [appData, selectedRange, summary]);
 
@@ -279,7 +264,43 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
     setDialogOpen(true);
   };
 
+  // Pre-filter items to avoid double-filtering in JSX
+  const filteredRevenueItems = useMemo(() => {
+    if (!viewTaskDetails?.revenueItems) return [];
+    if (!dialogSearch) return viewTaskDetails.revenueItems;
+    const search = dialogSearch.toLowerCase();
+    return viewTaskDetails.revenueItems.filter(item => 
+      item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search)
+    );
+  }, [viewTaskDetails, dialogSearch]);
 
+  const filteredCostItems = useMemo(() => {
+    if (!viewTaskDetails?.costItems) return [];
+    const items = viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-'));
+    if (!dialogSearch) return items;
+    const search = dialogSearch.toLowerCase();
+    return items.filter(item => 
+      item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search)
+    );
+  }, [viewTaskDetails, dialogSearch]);
+
+  const filteredFutureRevenueItems = useMemo(() => {
+    if (!viewAdditionalTaskDetails?.futureRevenueItems) return [];
+    if (!dialogSearch) return viewAdditionalTaskDetails.futureRevenueItems;
+    const search = dialogSearch.toLowerCase();
+    return viewAdditionalTaskDetails.futureRevenueItems.filter(item => 
+      item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search)
+    );
+  }, [viewAdditionalTaskDetails, dialogSearch]);
+
+  const filteredLostRevenueItems = useMemo(() => {
+    if (!viewAdditionalTaskDetails?.lostRevenueItems) return [];
+    if (!dialogSearch) return viewAdditionalTaskDetails.lostRevenueItems;
+    const search = dialogSearch.toLowerCase();
+    return viewAdditionalTaskDetails.lostRevenueItems.filter(item => 
+      item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search)
+    );
+  }, [viewAdditionalTaskDetails, dialogSearch]);
 
   if (!summary && !appData) {
     return (
@@ -446,7 +467,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="text-xs">
-                      {'Chỉ tính doanh thu từ quotes có trạng thái "Đã thanh toán"'}
+                      {T.revenueTooltip || 'Only counts revenue from quotes with "Paid" status'}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -473,7 +494,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="text-xs">
-                      {'Chỉ tính chi phí cộng tác viên và chi tiêu có trạng thái "Đã thanh toán"'}
+                      {T.costsTooltip || 'Only counts collaborator costs and expenses with "Paid" status'}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -497,7 +518,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="text-xs">
-                      {'Lợi nhuận = Doanh thu đã nhận - Chi phí đã thanh toán'}
+                      {T.profitTooltip || 'Profit = Received Revenue - Paid Costs'}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -526,7 +547,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="text-xs">
-                          {'Doanh thu tương lai = Tổng giá trị quotes có trạng thái "Chưa thanh toán"'}
+                          {T.futureRevenueTooltip || 'Future Revenue = Total value of quotes with "Unpaid" status'}
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -553,7 +574,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="text-xs">
-                          {'Doanh thu mất = Tổng giá trị quotes có trạng thái "On-hold"'}
+                          {T.lostRevenueTooltip || 'Lost Revenue = Total value of quotes with "On-hold" status'}
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -581,7 +602,7 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="text-xs">
-                          {'Chi phí cố định được tính theo thời gian đã chọn'}
+                          {T.fixedCostsTooltip || 'Fixed costs are calculated based on the selected period'}
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -651,16 +672,8 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </CardContent>
                     </Card>
 
-                    {viewTaskDetails.revenueItems.filter(item => {
-                      if (!dialogSearch) return true;
-                      const search = dialogSearch.toLowerCase();
-                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                    }).length > 0 ? (
-                      viewTaskDetails.revenueItems.filter(item => {
-                        if (!dialogSearch) return true;
-                        const search = dialogSearch.toLowerCase();
-                        return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                      }).map((item) => (
+                    {filteredRevenueItems.length > 0 ? (
+                      filteredRevenueItems.map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/30 transition-colors"
@@ -731,20 +744,12 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                     )}
 
                     {/* Collaborator Costs Section */}
-                    {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).filter(item => {
-                      if (!dialogSearch) return true;
-                      const search = dialogSearch.toLowerCase();
-                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                    }).length > 0 && (
+                    {filteredCostItems.length > 0 && (
                         <div className="space-y-2">
                           <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 border-b border-red-200 dark:border-red-700 pb-1">
                             Collaborator Costs
                           </h4>
-                          {viewTaskDetails.costItems.filter((i) => !String(i.id).startsWith('expense-')).filter(item => {
-                            if (!dialogSearch) return true;
-                            const search = dialogSearch.toLowerCase();
-                            return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                          }).map((item) => (
+                          {filteredCostItems.map((item) => (
                             <div
                               key={item.id}
                               className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-lg border-2 border-red-200 dark:border-red-800 cursor-pointer hover:border-red-300 dark:hover:border-red-700 transition-colors"
@@ -778,16 +783,8 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </CardContent>
                     </Card>
 
-                    {viewAdditionalTaskDetails.futureRevenueItems.filter(item => {
-                      if (!dialogSearch) return true;
-                      const search = dialogSearch.toLowerCase();
-                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                    }).length > 0 ? (
-                      viewAdditionalTaskDetails.futureRevenueItems.filter(item => {
-                        if (!dialogSearch) return true;
-                        const search = dialogSearch.toLowerCase();
-                        return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                      }).map((item) => (
+                    {filteredFutureRevenueItems.length > 0 ? (
+                      filteredFutureRevenueItems.map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/30 transition-colors"
@@ -817,16 +814,8 @@ export function FinancialSummaryCard({ summary, currency = 'USD', locale, taskDe
                       </CardContent>
                     </Card>
 
-                    {viewAdditionalTaskDetails.lostRevenueItems.filter(item => {
-                      if (!dialogSearch) return true;
-                      const search = dialogSearch.toLowerCase();
-                      return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                    }).length > 0 ? (
-                      viewAdditionalTaskDetails.lostRevenueItems.filter(item => {
-                        if (!dialogSearch) return true;
-                        const search = dialogSearch.toLowerCase();
-                        return item.name.toLowerCase().includes(search) || item.clientName.toLowerCase().includes(search);
-                      }).map((item) => (
+                    {filteredLostRevenueItems.length > 0 ? (
+                      filteredLostRevenueItems.map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-950/20 rounded-lg border cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/30 transition-colors"

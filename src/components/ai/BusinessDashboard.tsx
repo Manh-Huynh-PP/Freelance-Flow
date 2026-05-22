@@ -49,6 +49,7 @@ export function BusinessDashboard() {
   const selectedQuote = selectedTaskId ? appData?.quotes?.find((q: Quote) => q.id === (appData?.tasks?.find((t: Task) => t.id === selectedTaskId)?.quoteId)) : null;
   const selectedCollaboratorQuotes = selectedTaskId ? appData?.tasks?.find((t: Task) => t.id === selectedTaskId)?.collaboratorQuotes?.map((link: { collaboratorId: string; quoteId: string }) => appData?.collaboratorQuotes?.find((cq: CollaboratorQuote) => cq.id === link.quoteId)).filter(Boolean) as any[] : [];
 
+  const shouldShowAnalysisPanel = isAnalysisPanelVisible && (!!analysis || isAiLoading);
   // Effect 1: Calculate Financial Data whenever Data or Range changes
   useEffect(() => {
     if (!appData) return;
@@ -350,9 +351,9 @@ export function BusinessDashboard() {
               variant="outline"
               size="sm"
               className="flex items-center gap-2 transition-all duration-300 hover:scale-105"
-              title={isAnalysisPanelVisible ? "Hide AI Panel" : "Show AI Panel"}
+              title={shouldShowAnalysisPanel ? "Hide AI Panel" : "Show AI Panel"}
             >
-              {isAnalysisPanelVisible ? (
+              {shouldShowAnalysisPanel ? (
                 <ChevronRight className="w-4 h-4 transition-transform duration-300" />
               ) : (
                 <ChevronLeft className="w-4 h-4 transition-transform duration-300" />
@@ -365,8 +366,11 @@ export function BusinessDashboard() {
 
 
 
-      <div className={cn("flex flex-col lg:flex-row gap-6 items-start transition-all duration-500")}>
-        <div className={cn("space-y-6 transition-all duration-500", isAnalysisPanelVisible ? "lg:w-[66.67%]" : "lg:w-[100%]")}>
+      <div className={cn("flex flex-col lg:flex-row transition-all duration-500", shouldShowAnalysisPanel ? "gap-6 items-start" : "justify-center items-center")}>
+        <div 
+          className={cn("space-y-6 transition-all duration-500 w-full", shouldShowAnalysisPanel ? "lg:w-[66.67%]" : "")}
+          style={{ maxWidth: shouldShowAnalysisPanel ? '100%' : '1000px', margin: shouldShowAnalysisPanel ? '0' : '0 auto' }}
+        >
           <FinancialSummaryCard
             summary={summary}
             currency={appData?.appSettings?.currency || 'USD'}
@@ -383,7 +387,10 @@ export function BusinessDashboard() {
           />
         </div>
 
-        <div className={cn("space-y-6 transition-all duration-500 ease-in-out transform", isAnalysisPanelVisible ? "lg:w-[33.33%] opacity-100 translate-x-0 scale-100" : "lg:w-0 opacity-0 -translate-x-4 scale-95 pointer-events-none overflow-hidden")}>
+        <div 
+          className={cn("transition-all duration-500 ease-in-out transform", shouldShowAnalysisPanel ? "space-y-6 lg:w-[33.33%] w-full opacity-100 translate-x-0 scale-100" : "opacity-0 -translate-x-4 scale-95 pointer-events-none overflow-hidden")}
+          style={shouldShowAnalysisPanel ? {} : { width: 0, height: 0, margin: 0, padding: 0 }}
+        >
           {aiError && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />

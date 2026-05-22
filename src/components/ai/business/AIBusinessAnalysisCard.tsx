@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Lightbulb, Brain, Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useDashboard } from '@/contexts/dashboard-context';
+import { i18n } from '@/lib/i18n';
 
 interface Insight {
   category: 'Risk' | 'Opportunity' | 'Optimization';
@@ -51,6 +53,9 @@ const getCategoryColorClass = (category: string) => {
 };
 
 export function AIBusinessAnalysisCard({ analysis, onGenerate, isLoading, analysisTimestamp }: AIBusinessAnalysisCardProps) {
+  const { appData } = useDashboard();
+  const T = i18n[appData?.appSettings?.language as keyof typeof i18n || 'en'] as any;
+
   return (
     <div className="space-y-4">
       {/* Removed the internal Analyze button from here */}
@@ -62,12 +67,12 @@ export function AIBusinessAnalysisCard({ analysis, onGenerate, isLoading, analys
           <div>
             <CardTitle className="flex items-center gap-2">
               <Lightbulb className="w-5 h-5 text-primary" />
-              AI Business Analysis
+              {T.aiBusinessAnalysis || 'AI Business Analysis'}
             </CardTitle>
             {analysisTimestamp ? (
-              <CardDescription>Last analyzed: {new Date(analysisTimestamp).toLocaleString()}</CardDescription>
+              <CardDescription>{T.lastAnalyzed || 'Last analyzed'}: {new Date(analysisTimestamp).toLocaleString()}</CardDescription>
             ) : (
-              <CardDescription>Generate insights from your business data.</CardDescription>
+              <CardDescription>{T.generateInsights || 'Generate insights from your business data.'}</CardDescription>
             )}
           </div>
         </div>
@@ -76,7 +81,7 @@ export function AIBusinessAnalysisCard({ analysis, onGenerate, isLoading, analys
         {!analysis ? (
             <div className="text-center text-sm text-muted-foreground h-full flex flex-col items-center justify-center">
                 {/* Changed text, as the button is now external */}
-                No analysis generated. Click "Analyze" to get AI-powered insights for the selected date range.
+                {T.noAnalysisGenerated || 'No analysis generated. Click "Analyze" to get AI-powered insights for the selected date range.'}
             </div>
         ) : (
           <div className="space-y-4">
@@ -90,7 +95,7 @@ export function AIBusinessAnalysisCard({ analysis, onGenerate, isLoading, analys
             
             {/* Display Actions/Insights */}
             <div>
-              <h4 className="font-semibold text-sm mb-2">Insights & Suggestions</h4>
+              <h4 className="font-semibold text-sm mb-2">{T.insightsAndSuggestions || 'Insights & Suggestions'}</h4>
               <div className="space-y-4">
                   {(analysis.insights || []).length > 0 ? (
                       (analysis.insights || []).map((insight: Insight, i: number) => (
@@ -99,15 +104,15 @@ export function AIBusinessAnalysisCard({ analysis, onGenerate, isLoading, analys
                                   <span className={`font-semibold ${getCategoryColorClass(insight.category)}`}>
                                       {insight.category}
                                   </span>
-                                  <span className="ml-2 text-muted-foreground">(Severity: {insight.severity})</span>
+                                  <span className="ml-2 text-muted-foreground">({T.severity || 'Severity'}: {insight.severity})</span>
                               </p>
                               <p className="font-medium text-sm mt-1">{insight.insight}</p>
-                              <p className="text-sm mt-1"><strong>Suggestion:</strong> {insight.suggestion}</p>
+                              <p className="text-sm mt-1"><strong>{T.suggestion || 'Suggestion'}:</strong> {insight.suggestion}</p>
                               <p className="text-xs text-gray-500 mt-1">({insight.justification})</p>
                           </div>
                       ))
                   ) : (
-                      <p className="text-sm text-muted-foreground">No actionable insights generated. Try adjusting your data or the analysis period.</p>
+                      <p className="text-sm text-muted-foreground">{T.noActionableInsights || 'No actionable insights generated. Try adjusting your data or the analysis period.'}</p>
                   )}
               </div>
             </div>

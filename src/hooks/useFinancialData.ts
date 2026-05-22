@@ -43,7 +43,11 @@ export function useFinancialData(appData: AppData): FinancialData {
     // Monthly income breakdown
     const monthlyIncomeMap = new Map<string, number>();
     completedTasks.forEach(task => {
-      const month = new Date(task.deadline).toISOString().slice(0, 7); // YYYY-MM
+      if (!task.deadline) return;
+      const deadlineDate = new Date(task.deadline);
+      if (isNaN(deadlineDate.getTime())) return;
+      
+      const month = deadlineDate.toISOString().slice(0, 7); // YYYY-MM
       const quote = quotes.find(q => q.id === task.quoteId);
       const currentIncome = monthlyIncomeMap.get(month) || 0;
       monthlyIncomeMap.set(month, currentIncome + (quote?.total || 0));
@@ -95,18 +99,25 @@ export function useFinancialData(appData: AppData): FinancialData {
       return acc;
     }, {} as Record<string, number>);
 
-    // Profit margins (simplified - assuming 70% profit margin for now)
+    // Profit margins — use actual collaborator costs when available
     const profitMargins = tasks.map(task => {
       const quote = quotes.find(q => q.id === task.quoteId);
       const revenue = quote?.total || 0;
-      const cost = revenue * 0.3; // Assume 30% cost
-      const margin = ((revenue - cost) / revenue) * 100;
+      
+      // Use collaboratorQuotes total as actual cost if available, else 0
+      const collabQuotes = (appData as any)?.collaboratorQuotes || [];
+      const taskCollabCost = collabQuotes
+        .filter((cq: any) => cq.taskId === task.id)
+        .reduce((sum: number, cq: any) => sum + (cq.total || 0), 0);
+      
+      const cost = taskCollabCost;
+      const margin = revenue > 0 ? ((revenue - cost) / revenue) * 100 : 0;
       
       return {
         taskId: task.id,
         cost,
         revenue,
-        margin: isNaN(margin) ? 0 : margin
+        margin
       };
     });
 

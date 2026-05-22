@@ -10,11 +10,24 @@ interface FinancialHeroProps {
     expenses: number;
     margin: number;
     currency: string;
+    locale?: string;
+    labels?: {
+        netProfit?: string;
+        margin?: string;
+        totalRevenue?: string;
+        grossIncome?: string;
+        totalCosts?: string;
+        expenses?: string;
+        runway?: string;
+        runwaySubtext?: string;
+        days?: string;
+    };
 }
 
-export function FinancialHero({ netProfit, revenue, expenses, margin, currency = 'USD' }: FinancialHeroProps) {
+export function FinancialHero({ netProfit, revenue, expenses, margin, currency = 'USD', locale, labels }: FinancialHeroProps) {
     const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
+        const resolvedLocale = locale || (currency === 'VND' ? 'vi-VN' : 'en-US');
+        return new Intl.NumberFormat(resolvedLocale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
     };
 
     return (
@@ -27,12 +40,12 @@ export function FinancialHero({ netProfit, revenue, expenses, margin, currency =
                 <div className="absolute top-0 right-0 p-3 opacity-10">
                     <DollarSign className="w-24 h-24" />
                 </div>
-                <span className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Net Profit</span>
+                <span className="text-sm font-medium text-muted-foreground uppercase tracking-widest">{labels?.netProfit || 'Net Profit'}</span>
                 <div className={cn("text-4xl font-bold tracking-tighter", netProfit >= 0 ? "text-emerald-500" : "text-red-500")}>
                     {formatCurrency(netProfit)}
                 </div>
                 <div className={cn("text-xs px-2 py-0.5 rounded-full border bg-background/50", netProfit >= 0 ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30")}>
-                    {margin}% Margin
+                    {margin}% {labels?.margin || 'Margin'}
                 </div>
             </Card>
 
@@ -40,21 +53,21 @@ export function FinancialHero({ netProfit, revenue, expenses, margin, currency =
             <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <StatCard
                     icon={<TrendingUp className="w-5 h-5 text-blue-500" />}
-                    label="Total Revenue"
+                    label={labels?.totalRevenue || "Total Revenue"}
                     value={formatCurrency(revenue)}
-                    subtext="Gross Income"
+                    subtext={labels?.grossIncome || "Gross Income"}
                 />
                 <StatCard
                     icon={<TrendingDown className="w-5 h-5 text-orange-500" />}
-                    label="Total Costs"
+                    label={labels?.totalCosts || "Total Costs"}
                     value={formatCurrency(expenses)}
-                    subtext="Expenses & COGS"
+                    subtext={labels?.expenses || "Expenses & COGS"}
                 />
                 <StatCard
                     icon={<Wallet className="w-5 h-5 text-purple-500" />}
-                    label="Runway (Est.)"
-                    value={expenses > 0 ? `${(Math.max(0, netProfit) / (expenses / 30)).toFixed(1)} Days` : "∞"}
-                    subtext="Based on current monthly avg"
+                    label={labels?.runway || "Runway (Est.)"}
+                    value={expenses > 0 ? `${(Math.max(0, netProfit) / (expenses / 30)).toFixed(1)} ${labels?.days || "Days"}` : "∞"}
+                    subtext={labels?.runwaySubtext || "Based on current monthly avg"}
                 />
             </div>
         </div>
