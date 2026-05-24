@@ -11,6 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { usePersistedToggle, TOGGLE_KEYS } from '@/lib/utils/toggle-persistence';
 import { SupabaseDataService } from '@/lib/supabase-data-service';
+import { useToast } from '@/hooks/use-toast';
+import { exportFinancialReportToExcel } from '@/lib/export-financial-report';
+import { Download } from 'lucide-react';
 
 import {
   calculateFinancialSummary,
@@ -46,6 +49,9 @@ export function BusinessDashboard() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [aiError, setAiError] = useState<string | null>(null); // New error state from AI
+  const [isExporting, setIsExporting] = useState(false);
+  const { toast } = useToast();
+  
   const selectedQuote = selectedTaskId ? appData?.quotes?.find((q: Quote) => q.id === (appData?.tasks?.find((t: Task) => t.id === selectedTaskId)?.quoteId)) : null;
   const selectedCollaboratorQuotes = selectedTaskId ? appData?.tasks?.find((t: Task) => t.id === selectedTaskId)?.collaboratorQuotes?.map((link: { collaboratorId: string; quoteId: string }) => appData?.collaboratorQuotes?.find((cq: CollaboratorQuote) => cq.id === link.quoteId)).filter(Boolean) as any[] : [];
 
@@ -112,6 +118,27 @@ export function BusinessDashboard() {
       // setAnalysisTimestamp(undefined); // Keep timestamp? No.
     }
   }, [dateRange]);
+
+  const handleExportExcel = async () => {
+    if (!appData) return;
+    try {
+      setIsExporting(true);
+      await exportFinancialReportToExcel(appData, dateRange, appData.appSettings?.currency || 'USD');
+      toast({
+        title: T?.success || "Success",
+        description: T?.exportSuccessful || "The financial report has been downloaded.",
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: T?.error || "Error",
+        description: T?.exportFailed || "There was an error exporting the report.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleAiAnalysis = async () => {
     if (!summary || !appData) return;
@@ -328,6 +355,20 @@ export function BusinessDashboard() {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">{T.businessDashboardTitle || "Business Dashboard"}</h2>
         <div className="flex items-center gap-3">
+          <Button
+            onClick={handleExportExcel}
+            disabled={isExporting}
+            variant="outline"
+            className="flex items-center gap-2 shadow-sm border-green-200 hover:bg-green-50 hover:text-green-700 dark:border-green-800 dark:hover:bg-green-900/30"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            {T?.exportReport || 'Export Report'}
+          </Button>
+
           <Button
             onClick={handleAiAnalysis}
             disabled={isAiLoading || !hasApiKeyInSettings}
